@@ -18,7 +18,7 @@ This is the **0.15.2 fork** — a full backport to Bitcoin Core 0.15.2 with HD w
 |---|---|
 | Algorithm | Blake-256 (8 rounds) |
 | Block time | 3 minutes |
-| Block reward | 25 BLC |
+| Block reward | 50 BLC |
 | Difficulty retarget | Every 20 blocks |
 | Default port | 8773 |
 | RPC port | 8772 |
