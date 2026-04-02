@@ -20,7 +20,7 @@
 #   sidgrip/mxe-base:latest       — Windows cross-compile (MXE + MinGW)
 #   sidgrip/osxcross-base:latest  — macOS cross-compile (osxcross + clang-18)
 #
-# Repository: https://github.com/BlueDragon747/Blakecoin (branch: 0.15.2)
+# Repository: https://github.com/BlueDragon747/Blakecoin (branch: master)
 # =============================================================================
 
 set -euo pipefail
@@ -35,7 +35,7 @@ CLI_NAME="blakecoin-cli"
 TX_NAME="blakecoin-tx"
 VERSION="0.15.2"
 REPO_URL="https://github.com/BlueDragon747/Blakecoin.git"
-REPO_BRANCH="0.15.2"
+REPO_BRANCH="master"
 QT_LINUX_LAUNCHER_SOURCE="$SCRIPT_DIR/contrib/linux-release/blakecoin-qt-launcher.c"
 APPIMAGE_LAUNCHER_SOURCE="$SCRIPT_DIR/contrib/appimage-release/blakecoin-appimage-launcher.c"
 APPIMAGE_PUBLIC_NAME="${COIN_NAME_UPPER}-${VERSION}-x86_64.AppImage"
@@ -52,11 +52,12 @@ WINDOWS_INSTALLER_ICON_ICO="$SCRIPT_DIR/share/pixmaps/Blakecoin.ico"
 # Network ports and config
 RPC_PORT=8772
 P2P_PORT=8773
-CHAINZ_CODE="blc"
+EXPLORER_API_BASE="https://explorer.blakestream.io/api"
+EXPLORER_COIN_ID="blc"
 CONFIG_FILE="${COIN_NAME}.conf"
 LISTEN='listen=1'
 DAEMON='daemon=1'
-SERVER='server=0'
+SERVER='server=1'
 TXINDEX='txindex=0'
 
 # Docker images
@@ -889,27 +890,72 @@ EOF
 
 generate_config() {
     local conf_path="$OUTPUT_BASE/$CONFIG_FILE"
-    if [[ -f "$conf_path" ]]; then
-        info "Config already exists: $conf_path"
-        return
-    fi
-
-    info "Generating $CONFIG_FILE..."
+    local data_dir="$HOME/.${COIN_NAME}"
+    local data_conf_path="$data_dir/$CONFIG_FILE"
     local rpcuser rpcpassword peers=""
-    rpcuser="rpcuser=$(LC_ALL=C head -c 100 /dev/urandom | LC_ALL=C tr -cd '[:alnum:]' | head -c 10)"
-    rpcpassword="rpcpassword=$(LC_ALL=C head -c 200 /dev/urandom | LC_ALL=C tr -cd '[:alnum:]' | head -c 22)"
+    local peers_json=""
+    local tmp_conf=""
+    local host_os=""
+    local daemon_line="$DAEMON"
 
-    # Fetch active peers from chainz cryptoid
-    if command -v curl &>/dev/null; then
-        local nodes
-        nodes=$(curl -s "https://chainz.cryptoid.info/${CHAINZ_CODE}/api.dws?q=nodes" 2>/dev/null || true)
-        if [[ -n "$nodes" ]]; then
-            peers=$(grep -Eo '[0-9]{1,3}(\.[0-9]{1,3}){3}' <<< "$nodes" | grep -v '^0\.' | sed 's/^/addnode=/' || true)
+    fetch_explorer_addnodes() {
+        if ! command -v curl &>/dev/null; then
+            return 0
         fi
-    fi
 
-    mkdir -p "$OUTPUT_BASE"
-    cat > "$conf_path" <<EOF
+        peers_json=$(curl -fsSL --connect-timeout 5 --max-time 15 \
+            "${EXPLORER_API_BASE%/}/${EXPLORER_COIN_ID}/globe/peers" 2>/dev/null || true)
+
+        if [[ -n "$peers_json" ]]; then
+            printf '%s\n' "$peers_json" \
+                | grep -oE '"addr"[[:space:]]*:[[:space:]]*"([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?"' \
+                | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' \
+                | awk -F. '
+                    $1 >= 0 && $1 <= 255 &&
+                    $2 >= 0 && $2 <= 255 &&
+                    $3 >= 0 && $3 <= 255 &&
+                    $4 >= 0 && $4 <= 255 &&
+                    $1 != 0 &&
+                    $1 != 10 &&
+                    $1 != 127 &&
+                    !($1 == 169 && $2 == 254) &&
+                    !($1 == 172 && $2 >= 16 && $2 <= 31) &&
+                    !($1 == 192 && $2 == 168) &&
+                    !($1 == 100 && $2 >= 64 && $2 <= 127) &&
+                    $1 < 224
+                ' \
+                | sort -u \
+                | sed 's/^/addnode=/'
+        fi
+    }
+
+    mkdir -p "$OUTPUT_BASE" "$data_dir"
+    host_os="$(detect_os)"
+    if [[ "$host_os" == "windows" ]]; then
+        daemon_line=""
+    fi
+    peers="$(fetch_explorer_addnodes || true)"
+
+    if [[ -f "$data_conf_path" ]]; then
+        info "Refreshing active peer addnode entries in $data_conf_path"
+        tmp_conf=$(mktemp)
+        if [[ "$host_os" == "windows" ]]; then
+            sed '/^addnode=/d;/^daemon=/d' "$data_conf_path" > "$tmp_conf"
+        else
+            sed '/^addnode=/d' "$data_conf_path" > "$tmp_conf"
+        fi
+        if [[ -n "$peers" ]]; then
+            printf '%s\n' "$peers" >> "$tmp_conf"
+        else
+            warn "Explorer returned no usable peers; leaving config without addnode entries"
+        fi
+        mv "$tmp_conf" "$data_conf_path"
+        tmp_conf=""
+    else
+        info "Generating $CONFIG_FILE..."
+        rpcuser="rpcuser=$(LC_ALL=C head -c 100 /dev/urandom | LC_ALL=C tr -cd '[:alnum:]' | head -c 10)"
+        rpcpassword="rpcpassword=$(LC_ALL=C head -c 200 /dev/urandom | LC_ALL=C tr -cd '[:alnum:]' | head -c 22)"
+        cat > "$data_conf_path" <<EOF
 maxconnections=20
 $rpcuser
 $rpcpassword
@@ -918,22 +964,19 @@ rpcport=$RPC_PORT
 port=$P2P_PORT
 gen=0
 $LISTEN
-$DAEMON
+$daemon_line
 $SERVER
 $TXINDEX
 $peers
 EOF
-    success "Config written: $conf_path"
-
-    # Copy config to data directory if not already present
-    local data_dir="$HOME/.${COIN_NAME}"
-    mkdir -p "$data_dir"
-    if [[ ! -f "$data_dir/$CONFIG_FILE" ]]; then
-        cp "$conf_path" "$data_dir/$CONFIG_FILE"
-        info "Config installed to $data_dir/$CONFIG_FILE"
-    else
-        info "Config already exists in $data_dir/ — not overwriting"
+        if [[ -z "$peers" ]]; then
+            warn "Explorer returned no usable peers; created config without addnode entries"
+        fi
     fi
+
+    cp "$data_conf_path" "$conf_path"
+    success "Config written: $conf_path"
+    info "Config installed to $data_conf_path"
 }
 
 ensure_docker_image() {
@@ -1558,7 +1601,7 @@ set -e
 cd /build/'"$COIN_NAME"'
 
 # Patch sources for Qt 5.15+ and Boost 1.73+ compatibility
-echo ">>> Patching sources for Ubuntu 22.04 compatibility..."
+echo ">>> Patching sources for modern Ubuntu compatibility..."
 if [ -f src/qt/trafficgraphwidget.cpp ]; then
     grep -q "#include <QPainterPath>" src/qt/trafficgraphwidget.cpp || \
         sed -i "1i #include <QPainterPath>" src/qt/trafficgraphwidget.cpp
@@ -1900,7 +1943,7 @@ set -e
 cd /build/'"$COIN_NAME"'
 
 # Patch sources for Qt 5.15+ and Boost 1.73+ compatibility
-echo ">>> Patching sources for Ubuntu 22.04 compatibility..."
+echo ">>> Patching sources for modern Ubuntu compatibility..."
 # QPainterPath split into separate header in Qt 5.15
 if [ -f src/qt/trafficgraphwidget.cpp ]; then
     grep -q "#include <QPainterPath>" src/qt/trafficgraphwidget.cpp || \
@@ -2017,16 +2060,27 @@ build_native_linux_direct() {
     # Define required packages
     local build_deps="build-essential libtool-bin autotools-dev automake pkg-config curl"
 
-    # BDB: prefer 4.8 for wallet portability, fall back to system version
+    # BDB: prefer 4.8 for wallet portability, otherwise use the newest C++ dev package
+    # the distro exposes so configure can still find db_cxx.h.
     local bdb_deps=""
-    local bdb48_candidate
-    bdb48_candidate=$(apt-cache policy libdb4.8++-dev 2>/dev/null | grep 'Candidate:' | awk '{print $2}')
+    local bdb48_candidate=""
+    local bdb53pp_candidate=""
+    local bdb_generic_candidate=""
+    bdb48_candidate=$(apt-cache policy libdb4.8++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
+    bdb53pp_candidate=$(apt-cache policy libdb5.3++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
+    bdb_generic_candidate=$(apt-cache policy "libdb++-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')
     if [[ -n "$bdb48_candidate" && "$bdb48_candidate" != "(none)" ]]; then
         bdb_deps="libdb4.8-dev libdb4.8++-dev"
         info "BDB 4.8 available — wallets will be portable"
-    else
+    elif [[ -n "$bdb53pp_candidate" && "$bdb53pp_candidate" != "(none)" ]]; then
+        bdb_deps="libdb5.3-dev libdb5.3++-dev"
+        info "BDB 4.8 not available — using libdb5.3++-dev (--with-incompatible-bdb will be applied)"
+    elif [[ -n "$bdb_generic_candidate" && "$bdb_generic_candidate" != "(none)" ]]; then
         bdb_deps="libdb++-dev"
-        info "BDB 4.8 not available — using system BDB (--with-incompatible-bdb will be applied)"
+        info "BDB 4.8 not available — using generic libdb++-dev (--with-incompatible-bdb will be applied)"
+    else
+        bdb_deps="libdb-dev"
+        warn "No Berkeley DB C++ dev package candidate detected; configure may fail unless db_cxx headers are already present"
     fi
 
     local lib_deps="libssl-dev libevent-dev $bdb_deps libminiupnpc-dev libprotobuf-dev protobuf-compiler libboost-all-dev"
@@ -2078,7 +2132,7 @@ build_native_linux_direct() {
     # MSYS2 Boost 1.90 provides Boost.System as a header-only component,
     # so the legacy AX_BOOST_SYSTEM macro must not hard-fail on a missing
     # libboost_system archive.
-    if ! compgen -G "/mingw64/lib/libboost_system*" >/dev/null && [[ -f build-aux/m4/ax_boost_system.m4 ]]; then
+    if [[ -n "${MSYSTEM:-}" ]] && ! compgen -G "/mingw64/lib/libboost_system*" >/dev/null && [[ -f build-aux/m4/ax_boost_system.m4 ]]; then
         info "MSYS2 Boost.System is header-only — patching AX_BOOST_SYSTEM"
         perl -0pi -e 's/AC_MSG_ERROR\(Could not find a version of the boost_system library!\)/BOOST_SYSTEM_LIB=""; AC_SUBST(BOOST_SYSTEM_LIB); link_system="yes"/g' build-aux/m4/ax_boost_system.m4
     fi
@@ -2088,7 +2142,7 @@ build_native_linux_direct() {
 
     # Modern MSYS2 ships Boost.System as a header-only component, so there is
     # no libboost_system*.a to locate even though Boost itself is present.
-    if ! compgen -G "/mingw64/lib/libboost_system*" >/dev/null; then
+    if [[ -n "${MSYSTEM:-}" ]] && ! compgen -G "/mingw64/lib/libboost_system*" >/dev/null && [[ -f build-aux/m4/ax_boost_system.m4 ]]; then
         info "MSYS2 Boost.System is header-only — patching AX_BOOST_SYSTEM for no-library mode"
         perl -0pi -e 's/AC_MSG_ERROR\(Could not find a version of the boost_system library!\)/BOOST_SYSTEM_LIB=""; AC_SUBST(BOOST_SYSTEM_LIB); link_system="yes"/g' build-aux/m4/ax_boost_system.m4
     fi
@@ -2099,14 +2153,6 @@ build_native_linux_direct() {
 
     # Fix missing Qt translation files (Blakecoin fork does not include them)
     if [[ -f src/Makefile ]]; then
-        python3 - <<PY
-from pathlib import Path
-
-p = Path("src/Makefile")
-text = p.read_text()
-text = text.replace("-I/usr/local/include", "-I${boost_prefix}/include")
-p.write_text(text)
-PY
         sedi 's/^QT_QM.*=.*/QT_QM =/' src/Makefile
         sedi '/bitcoin_.*\.qm/d' src/Makefile
         sedi '/locale\/.*\.qm/d' src/Makefile
@@ -2140,7 +2186,7 @@ QRC_EOF
         success "Qt wallet in $output_dir/qt/"
 
         case "$ubuntu_ver" in
-            20.04|22.04|24.04)
+            20.04|22.04|24.04|25.10)
                 package_linux_release_from_native "$ubuntu_ver"
                 ;;
         esac

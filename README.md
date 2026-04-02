@@ -11,7 +11,7 @@ Blakecoin is the original Blake-256 coin and parent chain for [Photon](https://g
 - Uses the **Blake-256** hashing algorithm
 - Based on **Bitcoin Core 0.15.2**
 - Uses the autotools build system (`./configure` + `make`)
-- Ships release packages for Ubuntu 20.04, 22.04, 24.04, Windows, macOS, and Ubuntu 22+ AppImage
+- Ships release packages for Ubuntu 20.04, 22.04, 24.04, 25.10, Windows, macOS, and Ubuntu 22+ AppImage
 - Website: https://blakecoin.org
 
 | Network Info | |
@@ -75,7 +75,7 @@ bash ./build.sh --native --both
 ```
 
 - On supported Ubuntu hosts, `build.sh` auto-detects the OS version and installs missing packages automatically
-- Native Linux release packaging targets Ubuntu `20.04`, `22.04`, and `24.04`
+- Native Linux release packaging targets Ubuntu `20.04`, `22.04`, `24.04`, and `25.10`
 - Native Linux builds write raw outputs to `outputs/native/` and release artifacts to `outputs/release/`
 
 ### Linux (Docker)
@@ -158,6 +158,7 @@ bash ./build.sh --native --both
 - `blakecoin-v0.15.2-ubuntu-20.04-x86_64.tar.gz`
 - `blakecoin-v0.15.2-ubuntu-22.04-x86_64.tar.gz`
 - `blakecoin-v0.15.2-ubuntu-24.04-x86_64.tar.gz`
+- `blakecoin-v0.15.2-ubuntu-25.10-x86_64.tar.gz`
 
 These tarballs extract into a single top-level folder. Open that folder and run `./blakecoin-qt` for the GUI wallet, or use `./blakecoind`, `./blakecoin-cli`, and `./blakecoin-tx` for daemon-side tools.
 
@@ -215,6 +216,7 @@ outputs/
     ├── blakecoin-v0.15.2-ubuntu-20.04-x86_64.tar.gz
     ├── blakecoin-v0.15.2-ubuntu-22.04-x86_64.tar.gz
     ├── blakecoin-v0.15.2-ubuntu-24.04-x86_64.tar.gz
+    ├── blakecoin-v0.15.2-ubuntu-25.10-x86_64.tar.gz
     ├── Blakecoin-0.15.2-x86_64.AppImage.tar.gz
     ├── blakecoin-v0.15.2-windows-x86_64.zip
     └── blakecoin-v0.15.2-macos-x86_64.tar.gz
