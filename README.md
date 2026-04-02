@@ -120,7 +120,7 @@ bash ./build.sh --windows --both --pull-docker
 C:\msys64\usr\bin\bash.exe -lc "cd /c/path/to/Blakecoin-0.15.2 && ./build.sh --native --both --jobs 8"
 ```
 
-- Requires MSYS2 `bash` to exist before the script starts
+- Requires [MSYS2](https://www.msys2.org) `bash` to exist before the script starts
 - After launch, `build.sh` installs the required MSYS2 / MINGW64 packages automatically
 - Writes validation outputs to `outputs/windows-native/`
 
