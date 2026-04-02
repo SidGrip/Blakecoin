@@ -123,7 +123,6 @@ C:\msys64\usr\bin\bash.exe -lc "cd /c/path/to/Blakecoin-0.15.2 && ./build.sh --n
 - Requires MSYS2 `bash` to exist before the script starts
 - After launch, `build.sh` installs the required MSYS2 / MINGW64 packages automatically
 - Writes validation outputs to `outputs/windows-native/`
-- Native Windows builds are for local testing
 
 ### macOS
 
