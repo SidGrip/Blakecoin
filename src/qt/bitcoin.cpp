@@ -561,10 +561,15 @@ int main(int argc, char *argv[])
     QTextCodec::setCodecForCStrings(QTextCodec::codecForTr());
 #endif
 
-    Q_INIT_RESOURCE(bitcoin);
-    Q_INIT_RESOURCE(bitcoin_locale);
+    // On GNOME Wayland VMs, Qt's auto-selected Wayland path can emit noisy
+    // EGL/Zink warnings even though the app itself works fine. Prefer the
+    // stable XWayland/xcb backend unless the user explicitly chose a platform.
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM") &&
+        qEnvironmentVariableIsSet("WAYLAND_DISPLAY") &&
+        qEnvironmentVariableIsSet("DISPLAY")) {
+        qputenv("QT_QPA_PLATFORM", QByteArray("xcb"));
+    }
 
-    BitcoinApplication app(argc, argv);
 #if QT_VERSION > 0x050100
     // Generate high-dpi pixmaps
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
@@ -575,6 +580,11 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_MAC
     QApplication::setAttribute(Qt::AA_DontShowIconsInMenus);
 #endif
+
+    Q_INIT_RESOURCE(bitcoin);
+    Q_INIT_RESOURCE(bitcoin_locale);
+
+    BitcoinApplication app(argc, argv);
 #if QT_VERSION >= 0x050500
     // Because of the POODLE attack it is recommended to disable SSLv3 (https://disablessl3.com/),
     // so set SSL protocols to TLS1.0+.

@@ -19,6 +19,7 @@
 #include "wallet/wallet.h"
 
 #include <stdint.h>
+#include <set>
 #include <string>
 
 QString TransactionDesc::FormatTxStatus(const CWalletTx& wtx)
@@ -96,7 +97,54 @@ QString TransactionDesc::toHTML(CWallet *wallet, CWalletTx &wtx, TransactionReco
                 CTxDestination address = CBitcoinAddress(rec->address).Get();
                 if (wallet->mapAddressBook.count(address))
                 {
-                    strHTML += "<b>" + tr("From") + ":</b> " + tr("unknown") + "<br>";
+                    // Extract sender address(es) from scriptSig of each input
+                    // P2PKH scriptSig = <sig> <pubkey> — extract pubkey directly
+                    // This works without txindex and regardless of UTXO state
+                    {
+                        std::set<std::string> fromAddresses;
+                        for (const CTxIn& txin : wtx.tx->vin)
+                        {
+                            const CScript& scriptSig = txin.scriptSig;
+                            CScript::const_iterator pc = scriptSig.begin();
+                            opcodetype opcode;
+                            std::vector<unsigned char> lastData;
+                            // Walk all data pushes; the last one is the pubkey
+                            while (pc < scriptSig.end())
+                            {
+                                std::vector<unsigned char> data;
+                                if (!scriptSig.GetOp(pc, opcode, data))
+                                    break;
+                                if (data.size() > 0)
+                                    lastData = data;
+                            }
+                            // Pubkeys are 33 (compressed) or 65 (uncompressed) bytes
+                            if (lastData.size() == 33 || lastData.size() == 65)
+                            {
+                                CPubKey pubkey(lastData);
+                                if (pubkey.IsValid())
+                                {
+                                    CTxDestination sender = pubkey.GetID();
+                                    fromAddresses.insert(CBitcoinAddress(sender).ToString());
+                                }
+                            }
+                        }
+                        if (!fromAddresses.empty())
+                        {
+                            strHTML += "<b>" + tr("From") + ":</b> ";
+                            bool first = true;
+                            for (const std::string& addr : fromAddresses)
+                            {
+                                if (!first) strHTML += ", ";
+                                strHTML += GUIUtil::HtmlEscape(addr);
+                                first = false;
+                            }
+                            strHTML += "<br>";
+                        }
+                        else
+                        {
+                            strHTML += "<b>" + tr("From") + ":</b> " + tr("unknown") + "<br>";
+                        }
+                    }
                     strHTML += "<b>" + tr("To") + ":</b> ";
                     strHTML += GUIUtil::HtmlEscape(rec->address);
                     QString addressOwned = (::IsMine(*wallet, address) == ISMINE_SPENDABLE) ? tr("own address") : tr("watch-only");

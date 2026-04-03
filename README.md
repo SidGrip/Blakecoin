@@ -76,7 +76,13 @@ bash ./build.sh --native --both
 
 - On supported Ubuntu hosts, `build.sh` auto-detects the OS version and installs missing packages automatically
 - Native Linux release packaging targets Ubuntu `20.04`, `22.04`, `24.04`, and `25.10`
-- Native Linux builds write raw outputs to `outputs/native/` and release artifacts to `outputs/release/`
+- Native Linux builds write directly to `outputs/`
+- `--both` refreshes the full Ubuntu-native wallet files directly in `outputs/`
+- `--daemon` refreshes the daemon-side Linux files directly in `outputs/`
+- `--qt` refreshes the Qt wallet files directly in `outputs/`
+- Native Ubuntu outputs are bare same-Ubuntu binaries that rely on host-installed native packages
+- `outputs/install-deps.sh` and `outputs/README.md` are generated for the current Ubuntu version
+- Windows can be built either natively on Windows with MSYS2 or cross-compiled from Linux with Docker
 
 ### Linux (Docker)
 
@@ -96,23 +102,26 @@ bash ./build.sh --appimage --pull-docker
 ```
 
 - Uses `sidgrip/appimage-base:22.04`
-- Produces the raw payload in `outputs/linux-appimage/qt/`
-- Produces the public release bundle in `outputs/release/Blakecoin-0.15.2-x86_64.AppImage.tar.gz`
+- Produces a self-contained AppImage in `outputs/AppImage/`
+- The output folder keeps `Blakecoin-0.15.2-x86_64.AppImage`, `README.md`, and `build-info.txt`
 - Intended for Ubuntu `22.04+`
+- Direct launch on Ubuntu `22.04.5` needs `sudo apt install libfuse2`
+- Direct launch on Ubuntu `24.04.4` and `25.10` needs `sudo apt install libfuse2t64`
+- If the host is missing that package, AppImage runtime startup fails with `dlopen(): error loading libfuse.so.2`
+- Fallback launch remains `--appimage-extract-and-run`
 
 ### Windows
 
 There are two Windows paths in this repo:
 
-#### Windows release build
+#### Windows cross-build from Linux
 
 ```bash
 bash ./build.sh --windows --both --pull-docker
 ```
 
 - Runs on Linux with Docker using `sidgrip/mxe-base:latest`
-- Produces the public release zip in `outputs/release/blakecoin-v0.15.2-windows-x86_64.zip`
-- This is the main Windows release path
+- Writes loose cross-built outputs to `outputs/Windows/`
 
 #### Native Windows validation build
 
@@ -122,7 +131,8 @@ C:\msys64\usr\bin\bash.exe -lc "cd /c/path/to/Blakecoin && ./build.sh --native -
 
 - Requires [MSYS2](https://www.msys2.org) `bash` to exist before the script starts
 - After launch, `build.sh` installs the required MSYS2 / MINGW64 packages automatically
-- Writes validation outputs to `outputs/windows-native/`
+- Writes validation outputs to `outputs/Windows/`
+- Bundles native Windows `.exe` files, sidecar `.dll` files, `qt.conf`, `platforms/qwindows.dll`, and `build-info.txt` in that Windows output folder
 
 ### macOS
 
@@ -135,8 +145,7 @@ bash ./build.sh --macos --both --pull-docker
 ```
 
 - Runs on Linux with Docker using `sidgrip/osxcross-base:latest`
-- Produces artifacts in `outputs/macos/`
-- Produces the public release archive in `outputs/release/blakecoin-v0.15.2-macos-x86_64.tar.gz`
+- Produces artifacts in `outputs/Macosx/`
 
 #### Native build on macOS
 
@@ -146,49 +155,7 @@ bash ./build.sh --native --both
 
 - Uses Homebrew on the Mac host
 - `build.sh` installs missing Homebrew dependencies automatically
-- Native macOS builds write to `outputs/native/`
-
----
-
-## Releases
-
-### Linux
-
-- `blakecoin-v0.15.2-ubuntu-20.04-x86_64.tar.gz`
-- `blakecoin-v0.15.2-ubuntu-22.04-x86_64.tar.gz`
-- `blakecoin-v0.15.2-ubuntu-24.04-x86_64.tar.gz`
-- `blakecoin-v0.15.2-ubuntu-25.10-x86_64.tar.gz`
-
-These tarballs extract into a single top-level folder. Open that folder and run `./blakecoin-qt` for the GUI wallet, or use `./blakecoind`, `./blakecoin-cli`, and `./blakecoin-tx` for daemon-side tools.
-
-### AppImage
-
-- `Blakecoin-0.15.2-x86_64.AppImage.tar.gz`
-
-This is the portable Linux AppImage bundle for **Ubuntu 22.04 and newer**. Extract the tarball and run `./Blakecoin-0.15.2-x86_64.AppImage`.
-
-Ubuntu 20.04 users should use the native Ubuntu 20.04 tarball instead of the AppImage.
-
-### Windows
-
-- `blakecoin-v0.15.2-windows-x86_64.zip`
-
-The Windows release zip contains:
-
-- `blakecoin-qt-0.15.2.exe`
-- `blakecoind-0.15.2.exe`
-- `blakecoin-cli-0.15.2.exe`
-- `blakecoin-tx-0.15.2.exe`
-- `README.md`
-- `build-info.txt`
-
-The public Windows release is self-contained and does not ship sidecar DLL or plugin folders.
-
-### macOS
-
-- `blakecoin-v0.15.2-macos-x86_64.tar.gz`
-
-The macOS archive extracts the Qt app bundle plus the daemon, CLI, and tx binaries. Open `Blakecoin-Qt.app` for the GUI wallet.
+- Native macOS builds write to `outputs/Macosx/`
 
 ---
 
@@ -196,32 +163,46 @@ The macOS archive extracts the Qt app bundle plus the daemon, CLI, and tx binari
 
 ```text
 outputs/
-├── blakecoin.conf
-├── native/
-│   ├── daemon/
-│   └── qt/
-├── linux-appimage/
-│   └── qt/
-├── windows/
-│   ├── daemon/
-│   └── qt/
-├── windows-native/
-│   ├── daemon/
-│   └── qt/
-├── macos/
-│   ├── daemon/
-│   └── qt/
-└── release/
-    ├── blakecoin-v0.15.2-ubuntu-20.04-x86_64.tar.gz
-    ├── blakecoin-v0.15.2-ubuntu-22.04-x86_64.tar.gz
-    ├── blakecoin-v0.15.2-ubuntu-24.04-x86_64.tar.gz
-    ├── blakecoin-v0.15.2-ubuntu-25.10-x86_64.tar.gz
-    ├── Blakecoin-0.15.2-x86_64.AppImage.tar.gz
-    ├── blakecoin-v0.15.2-windows-x86_64.zip
-    └── blakecoin-v0.15.2-macos-x86_64.tar.gz
+├── AppImage/
+│   ├── Blakecoin-0.15.2-x86_64.AppImage
+│   ├── README.md
+│   └── build-info.txt
+├── Macosx/
+│   ├── Blakecoin-Qt.app
+│   ├── blakecoin-cli-0.15.2
+│   ├── blakecoin-qt-0.15.2
+│   ├── blakecoin-tx-0.15.2
+│   ├── blakecoind-0.15.2
+│   └── build-info.txt
+├── Ubuntu-20/
+│   ├── README.md
+│   ├── blakecoin-256.png
+│   ├── blakecoin-cli
+│   ├── blakecoin.conf
+│   ├── blakecoin.desktop
+│   ├── blakecoin-qt
+│   ├── blakecoin-qt-bin
+│   ├── blakecoin-tx
+│   ├── blakecoind
+│   └── install-deps.sh
+├── Ubuntu-22/
+├── Ubuntu-24/
+├── Ubuntu-25/
+└── Windows/
+    ├── blakecoin-cli-0.15.2.exe
+    ├── blakecoin-qt-0.15.2.exe
+    ├── blakecoin-tx-0.15.2.exe
+    ├── blakecoind-0.15.2.exe
+    └── build-info.txt
 ```
 
-`outputs/blakecoin.conf` is auto-generated with RPC credentials and default network settings during builds that need it.
+For Ubuntu native builds, the current host's final wallet files land in `outputs/Ubuntu-20/`, `outputs/Ubuntu-22/`, `outputs/Ubuntu-24/`, or `outputs/Ubuntu-25/` depending on the detected Ubuntu release. These are bare Ubuntu-native binaries, so each Ubuntu folder gets its own `install-deps.sh`, `README.md`, and `blakecoin.conf`.
+
+For native Windows builds, the current host's local validation bundle lands in `outputs/Windows/`, using `.exe` binaries plus bundled `.dll` files, `qt.conf`, `platforms/qwindows.dll`, and `build-info.txt`.
+
+For native macOS builds, the current host's daemon tools, `Blakecoin-Qt.app`, and the raw `blakecoin-qt-0.15.2` binary all land in `outputs/Macosx/`.
+
+For AppImage builds, `outputs/AppImage/` keeps `Blakecoin-0.15.2-x86_64.AppImage`, `README.md`, and `build-info.txt`.
 
 ---
 
@@ -231,9 +212,9 @@ When using `--pull-docker`, the build script uses these prebuilt images:
 
 | Image | Purpose |
 |---|---|
-| `sidgrip/native-base:20.04` | Native Linux Ubuntu 20.04 release build |
-| `sidgrip/native-base:22.04` | Native Linux Ubuntu 22.04 release build |
-| `sidgrip/native-base:24.04` | Native Linux Ubuntu 24.04 release build |
+| `sidgrip/native-base:20.04` | Native Linux Ubuntu 20.04 build |
+| `sidgrip/native-base:22.04` | Native Linux Ubuntu 22.04 build |
+| `sidgrip/native-base:24.04` | Native Linux Ubuntu 24.04 build |
 | `sidgrip/appimage-base:22.04` | Ubuntu 22+ AppImage build |
 | `sidgrip/mxe-base:latest` | Windows cross-compile |
 | `sidgrip/osxcross-base:latest` | macOS cross-compile |

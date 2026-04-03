@@ -7,6 +7,27 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifndef BLAKECOIN_QT_LAUNCH_TARGET
+#define BLAKECOIN_QT_LAUNCH_TARGET ".runtime/blakecoin-qt-bin"
+#endif
+
+#ifndef BLAKECOIN_QT_USE_RUNTIME_ENV
+#define BLAKECOIN_QT_USE_RUNTIME_ENV 1
+#endif
+
+#ifndef BLAKECOIN_QT_LIBRARY_PATH
+#define BLAKECOIN_QT_LIBRARY_PATH ".runtime/lib"
+#endif
+
+#ifndef BLAKECOIN_QT_PLUGIN_PATH
+#define BLAKECOIN_QT_PLUGIN_PATH ".runtime/plugins"
+#endif
+
+#ifndef BLAKECOIN_QT_PLATFORM_PLUGIN_PATH
+#define BLAKECOIN_QT_PLATFORM_PLUGIN_PATH ".runtime/plugins/platforms"
+#endif
+
+#if BLAKECOIN_QT_USE_RUNTIME_ENV
 static int prepend_env_path(const char *name, const char *prefix) {
     const char *current = getenv(name);
     size_t prefix_len = strlen(prefix);
@@ -32,14 +53,17 @@ static int prepend_env_path(const char *name, const char *prefix) {
     free(value);
     return 0;
 }
+#endif
 
 int main(int argc, char **argv) {
     char self_path[PATH_MAX];
     char app_dir[PATH_MAX];
     char target_path[PATH_MAX];
+#if BLAKECOIN_QT_USE_RUNTIME_ENV
     char lib_path[PATH_MAX];
     char plugin_path[PATH_MAX];
     char platform_plugin_path[PATH_MAX];
+#endif
     char **exec_argv = NULL;
     ssize_t len;
     char *slash;
@@ -64,10 +88,15 @@ int main(int argc, char **argv) {
     }
     *slash = '\0';
 
-    if (snprintf(target_path, sizeof(target_path), "%s/.runtime/blakecoin-qt-bin", app_dir) >= (int)sizeof(target_path) ||
-        snprintf(lib_path, sizeof(lib_path), "%s/.runtime/lib", app_dir) >= (int)sizeof(lib_path) ||
-        snprintf(plugin_path, sizeof(plugin_path), "%s/.runtime/plugins", app_dir) >= (int)sizeof(plugin_path) ||
-        snprintf(platform_plugin_path, sizeof(platform_plugin_path), "%s/.runtime/plugins/platforms", app_dir) >= (int)sizeof(platform_plugin_path)) {
+    if (snprintf(target_path, sizeof(target_path), "%s/%s", app_dir, BLAKECOIN_QT_LAUNCH_TARGET) >= (int)sizeof(target_path)) {
+        fprintf(stderr, "Runtime path is too long\n");
+        return 1;
+    }
+
+#if BLAKECOIN_QT_USE_RUNTIME_ENV
+    if (snprintf(lib_path, sizeof(lib_path), "%s/%s", app_dir, BLAKECOIN_QT_LIBRARY_PATH) >= (int)sizeof(lib_path) ||
+        snprintf(plugin_path, sizeof(plugin_path), "%s/%s", app_dir, BLAKECOIN_QT_PLUGIN_PATH) >= (int)sizeof(plugin_path) ||
+        snprintf(platform_plugin_path, sizeof(platform_plugin_path), "%s/%s", app_dir, BLAKECOIN_QT_PLATFORM_PLUGIN_PATH) >= (int)sizeof(platform_plugin_path)) {
         fprintf(stderr, "Runtime path is too long\n");
         return 1;
     }
@@ -82,6 +111,7 @@ int main(int argc, char **argv) {
         perror("setenv");
         return 1;
     }
+#endif
 
     exec_argv = calloc((size_t)argc + 1, sizeof(char *));
     if (exec_argv == NULL) {

@@ -37,17 +37,16 @@ VERSION="0.15.2"
 REPO_URL="https://github.com/BlueDragon747/Blakecoin.git"
 REPO_BRANCH="master"
 QT_LINUX_LAUNCHER_SOURCE="$SCRIPT_DIR/contrib/linux-release/blakecoin-qt-launcher.c"
-APPIMAGE_LAUNCHER_SOURCE="$SCRIPT_DIR/contrib/appimage-release/blakecoin-appimage-launcher.c"
 APPIMAGE_PUBLIC_NAME="${COIN_NAME_UPPER}-${VERSION}-x86_64.AppImage"
-APPIMAGE_PAYLOAD_NAME="${COIN_NAME_UPPER}-${VERSION}-x86_64.AppImage.payload"
-APPIMAGE_RELEASE_DIR_NAME="blakecoin-v${VERSION}-appimage-ubuntu-22plus-x86_64"
-APPIMAGE_RELEASE_ARCHIVE_NAME="${APPIMAGE_PUBLIC_NAME}.tar.gz"
-WINDOWS_RELEASE_ARCHIVE_NAME="blakecoin-v${VERSION}-windows-x86_64.zip"
 WINDOWS_ICON_SOURCE_PNG="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
 WINDOWS_ICON_SOURCE_TESTNET_PNG="$SCRIPT_DIR/src/qt/res/icons/bitcoin_testnet.png"
 WINDOWS_EXE_ICON_ICO="$SCRIPT_DIR/src/qt/res/icons/Blakecoin_32.ico"
 WINDOWS_EXE_ICON_TESTNET_ICO="$SCRIPT_DIR/src/qt/res/icons/Blakecoin_32_testnet.ico"
 WINDOWS_INSTALLER_ICON_ICO="$SCRIPT_DIR/share/pixmaps/Blakecoin.ico"
+NATIVE_LINUX_ALL_DEPS=()
+NATIVE_LINUX_ALL_DEPS_STR=""
+CURRENT_OUTPUT_DIR=""
+GENERATE_CONFIG_AFTER_BUILD=0
 
 # Network ports and config
 RPC_PORT=8772
@@ -261,6 +260,113 @@ detect_os_version() {
             fi
             ;;
     esac
+}
+
+normalize_ubuntu_output_label() {
+    local ubuntu_ver="${1:-unknown}"
+
+    case "$ubuntu_ver" in
+        20.04*) echo "Ubuntu-20" ;;
+        22.04*) echo "Ubuntu-22" ;;
+        24.04*) echo "Ubuntu-24" ;;
+        25.10*) echo "Ubuntu-25" ;;
+        *)
+            local major="${ubuntu_ver%%.*}"
+            if [[ -n "$major" && "$major" != "$ubuntu_ver" ]]; then
+                echo "Ubuntu-$major"
+            elif [[ "$ubuntu_ver" =~ ^[0-9]+$ ]]; then
+                echo "Ubuntu-$ubuntu_ver"
+            else
+                echo "Ubuntu"
+            fi
+            ;;
+    esac
+}
+
+linux_output_dir() {
+    local ubuntu_ver="${1:-unknown}"
+    printf '%s/%s\n' "$OUTPUT_BASE" "$(normalize_ubuntu_output_label "$ubuntu_ver")"
+}
+
+windows_output_dir() {
+    printf '%s/Windows\n' "$OUTPUT_BASE"
+}
+
+macos_output_dir() {
+    printf '%s/Macosx\n' "$OUTPUT_BASE"
+}
+
+appimage_output_dir() {
+    printf '%s/AppImage\n' "$OUTPUT_BASE"
+}
+
+cleanup_target_output_dir() {
+    local output_dir="$1"
+
+    rm -rf "$output_dir"
+    mkdir -p "$output_dir"
+}
+
+cleanup_legacy_output_root() {
+    mkdir -p "$OUTPUT_BASE"
+
+    rm -f \
+        "$OUTPUT_BASE/$DAEMON_NAME" \
+        "$OUTPUT_BASE/$CLI_NAME" \
+        "$OUTPUT_BASE/$TX_NAME" \
+        "$OUTPUT_BASE/$QT_NAME" \
+        "$OUTPUT_BASE/${QT_NAME}-bin" \
+        "$OUTPUT_BASE/${DAEMON_NAME}.exe" \
+        "$OUTPUT_BASE/${CLI_NAME}.exe" \
+        "$OUTPUT_BASE/${TX_NAME}.exe" \
+        "$OUTPUT_BASE/${QT_NAME}.exe" \
+        "$OUTPUT_BASE/${DAEMON_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${CLI_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${TX_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${QT_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${DAEMON_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/${CLI_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/${TX_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/${QT_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/install-deps.sh" \
+        "$OUTPUT_BASE/${COIN_NAME}.desktop" \
+        "$OUTPUT_BASE/${COIN_NAME}-256.png" \
+        "$OUTPUT_BASE/blakecoin.conf" \
+        "$OUTPUT_BASE/qt.conf" \
+        "$OUTPUT_BASE/README.md" \
+        "$OUTPUT_BASE/build-info.txt"
+
+    rm -rf \
+        "$OUTPUT_BASE/.runtime" \
+        "$OUTPUT_BASE/lib" \
+        "$OUTPUT_BASE/plugins" \
+        "$OUTPUT_BASE/platforms" \
+        "$OUTPUT_BASE/Blakecoin-Qt.app" \
+        "$OUTPUT_BASE/native" \
+        "$OUTPUT_BASE/windows" \
+        "$OUTPUT_BASE/macos" \
+        "$OUTPUT_BASE/windows-native" \
+        "$OUTPUT_BASE/macos-native" \
+        "$OUTPUT_BASE/daemon" \
+        "$OUTPUT_BASE/qt" \
+        "$OUTPUT_BASE/appimage" \
+        "$OUTPUT_BASE/release"
+
+    shopt -s nullglob
+    local stale_dlls=("$OUTPUT_BASE"/*.dll)
+    local stale_ubuntu_dirs=("$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64 "$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64-daemon "$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64-qt)
+    local stale_ubuntu_archives=("$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64.tar.gz)
+    shopt -u nullglob
+
+    if [[ ${#stale_dlls[@]} -gt 0 ]]; then
+        rm -f "${stale_dlls[@]}"
+    fi
+    if [[ ${#stale_ubuntu_dirs[@]} -gt 0 ]]; then
+        rm -rf "${stale_ubuntu_dirs[@]}"
+    fi
+    if [[ ${#stale_ubuntu_archives[@]} -gt 0 ]]; then
+        rm -f "${stale_ubuntu_archives[@]}"
+    fi
 }
 
 ensure_windows_native_shell() {
@@ -477,6 +583,17 @@ bundle_macos_transitive_dylibs() {
 
 compile_linux_qt_launcher() {
     local output_path="$1"
+    local target_rel="${2:-.runtime/${QT_NAME}-bin}"
+    local use_runtime_env="${3:-1}"
+    local gcc_args=(
+        -O2
+        -s
+        -Wall
+        -Wextra
+        -no-pie
+        "-DBLAKECOIN_QT_LAUNCH_TARGET=\"${target_rel}\""
+        "-DBLAKECOIN_QT_USE_RUNTIME_ENV=${use_runtime_env}"
+    )
 
     [[ -f "$QT_LINUX_LAUNCHER_SOURCE" ]] || {
         error "Linux Qt launcher source not found: $QT_LINUX_LAUNCHER_SOURCE"
@@ -485,19 +602,7 @@ compile_linux_qt_launcher() {
 
     # Ubuntu 20's default PIE launcher gets classified as application/x-sharedlib
     # in GNOME, so force a normal executable for release-click behavior.
-    gcc -O2 -s -Wall -Wextra -no-pie "$QT_LINUX_LAUNCHER_SOURCE" -o "$output_path"
-    chmod +x "$output_path"
-}
-
-compile_appimage_launcher() {
-    local output_path="$1"
-
-    [[ -f "$APPIMAGE_LAUNCHER_SOURCE" ]] || {
-        error "AppImage launcher source not found: $APPIMAGE_LAUNCHER_SOURCE"
-        exit 1
-    }
-
-    gcc -O2 -s -Wall -Wextra -no-pie "$APPIMAGE_LAUNCHER_SOURCE" -o "$output_path"
+    gcc "${gcc_args[@]}" "$QT_LINUX_LAUNCHER_SOURCE" -o "$output_path"
     chmod +x "$output_path"
 }
 
@@ -516,16 +621,213 @@ Categories=Finance;Network;
 EOF
 }
 
+resolve_native_linux_packages() {
+    local target="$1"
+    local bdb48_candidate=""
+    local bdb53pp_candidate=""
+    local bdb_generic_candidate=""
+    local bdb_deps=()
+    local qt_deps=()
+
+    NATIVE_LINUX_ALL_DEPS=(
+        build-essential
+        libtool-bin
+        autotools-dev
+        automake
+        pkg-config
+        curl
+        libssl-dev
+        libevent-dev
+        libminiupnpc-dev
+        libprotobuf-dev
+        protobuf-compiler
+        libboost-all-dev
+    )
+
+    bdb48_candidate=$(apt-cache policy libdb4.8++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
+    bdb53pp_candidate=$(apt-cache policy libdb5.3++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
+    bdb_generic_candidate=$(apt-cache policy "libdb++-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')
+    if [[ -n "$bdb48_candidate" && "$bdb48_candidate" != "(none)" ]]; then
+        bdb_deps=(libdb4.8-dev libdb4.8++-dev)
+        info "BDB 4.8 available — wallets will be portable"
+    elif [[ -n "$bdb53pp_candidate" && "$bdb53pp_candidate" != "(none)" ]]; then
+        bdb_deps=(libdb5.3-dev libdb5.3++-dev)
+        info "BDB 4.8 not available — using libdb5.3++-dev (--with-incompatible-bdb will be applied)"
+    elif [[ -n "$bdb_generic_candidate" && "$bdb_generic_candidate" != "(none)" ]]; then
+        bdb_deps=(libdb++-dev)
+        info "BDB 4.8 not available — using generic libdb++-dev (--with-incompatible-bdb will be applied)"
+    else
+        bdb_deps=(libdb-dev)
+        warn "No Berkeley DB C++ dev package candidate detected; configure may fail unless db_cxx headers are already present"
+    fi
+    NATIVE_LINUX_ALL_DEPS+=("${bdb_deps[@]}")
+
+    if [[ "$target" == "qt" || "$target" == "both" ]]; then
+        qt_deps=(qtbase5-dev qttools5-dev qttools5-dev-tools libqrencode-dev)
+        NATIVE_LINUX_ALL_DEPS+=("${qt_deps[@]}")
+    fi
+
+    NATIVE_LINUX_ALL_DEPS_STR="${NATIVE_LINUX_ALL_DEPS[*]}"
+}
+
+write_linux_install_deps_script() {
+    local script_path="$1"
+    local install_packages="$2"
+
+    cat > "$script_path" <<EOF
+#!/bin/bash
+set -euo pipefail
+
+sudo apt-get update -qq
+sudo apt-get install -y -qq ${install_packages}
+EOF
+    chmod +x "$script_path"
+}
+
 write_linux_release_readme() {
     local readme_path="$1"
     local ubuntu_ver="$2"
+    local target="${3:-both}"
+    local install_packages="${4:-}"
+    local qt_launcher_note=""
+    local qt_copy_block="cp blakecoin-qt ~/.local/bin/"
+    local qt_desktop_note=""
 
-    cat > "$readme_path" <<EOF
+    if [[ "$ubuntu_ver" == 20.04* ]]; then
+        qt_launcher_note=$'\nUbuntu 20.04 keeps `blakecoin-qt` as a tiny launcher beside `blakecoin-qt-bin` so GNOME treats it like an app instead of a shared library. Keep those two files together.\n'
+        qt_copy_block=$'cp blakecoin-qt blakecoin-qt-bin ~/.local/bin/'
+        qt_desktop_note=$'\nOn Ubuntu 20.04, copy `blakecoin-qt-bin` beside it too.\n'
+    fi
+
+    case "$target" in
+        daemon)
+            cat > "$readme_path" <<EOF
 # Blakecoin v${VERSION} - Linux x86_64 (Ubuntu ${ubuntu_ver})
 
 ## Quick Start
 
-Extract the release folder anywhere you like and run it in place. No system-wide install is required to use the wallet.
+These are bare Ubuntu-native daemon binaries. Install the native Ubuntu packages first if this host does not already have them.
+
+### Install native Ubuntu dependencies:
+\`\`\`bash
+chmod +x install-deps.sh
+./install-deps.sh
+\`\`\`
+
+Equivalent apt command:
+\`\`\`bash
+sudo apt-get update -qq
+sudo apt-get install -y -qq ${install_packages}
+\`\`\`
+
+### Start the daemon:
+\`\`\`bash
+./blakecoind -daemon
+./blakecoin-cli getinfo
+\`\`\`
+
+### Transaction utility:
+\`\`\`bash
+./blakecoin-tx -help
+\`\`\`
+
+## Installation (optional)
+
+\`\`\`bash
+cp blakecoind blakecoin-cli blakecoin-tx ~/.local/bin/
+\`\`\`
+
+After the native packages are installed, the daemon tools can live outside this folder.
+
+## Configuration
+
+On first run, a config file will be generated at \`~/.blakecoin/blakecoin.conf\` with random RPC credentials and peer nodes.
+
+- P2P port: 8773
+- RPC port: 8772
+
+## Build Info
+
+Built on Ubuntu ${ubuntu_ver}.
+EOF
+            ;;
+        qt)
+            cat > "$readme_path" <<EOF
+# Blakecoin v${VERSION} - Linux x86_64 (Ubuntu ${ubuntu_ver})
+
+## Quick Start
+
+This is a bare Ubuntu-native Qt wallet binary. Install the native Ubuntu packages first if this host does not already have them.
+${qt_launcher_note}
+
+### Install native Ubuntu dependencies:
+\`\`\`bash
+chmod +x install-deps.sh
+./install-deps.sh
+\`\`\`
+
+Equivalent apt command:
+\`\`\`bash
+sudo apt-get update -qq
+sudo apt-get install -y -qq ${install_packages}
+\`\`\`
+
+### Run the Qt wallet:
+\`\`\`bash
+./blakecoin-qt
+\`\`\`
+
+## Installation (optional)
+
+\`\`\`bash
+mkdir -p ~/.local/bin
+${qt_copy_block}
+\`\`\`
+
+### Install desktop entry and icon:
+${qt_desktop_note}
+
+\`\`\`bash
+mkdir -p ~/.local/bin
+mkdir -p ~/.local/share/applications
+mkdir -p ~/.local/share/icons/hicolor/256x256/apps
+${qt_copy_block}
+cp blakecoin.desktop ~/.local/share/applications/
+cp blakecoin-256.png ~/.local/share/icons/hicolor/256x256/apps/blakecoin-qt.png
+\`\`\`
+
+## Configuration
+
+On first run, a config file will be generated at \`~/.blakecoin/blakecoin.conf\` with random RPC credentials and peer nodes.
+
+- P2P port: 8773
+- RPC port: 8772
+
+## Build Info
+
+Built on Ubuntu ${ubuntu_ver}.
+EOF
+            ;;
+        both)
+            cat > "$readme_path" <<EOF
+# Blakecoin v${VERSION} - Linux x86_64 (Ubuntu ${ubuntu_ver})
+
+## Quick Start
+
+These are bare Ubuntu-native binaries. Install the native Ubuntu packages first if this host does not already have them.
+${qt_launcher_note}
+
+### Install native Ubuntu dependencies:
+\`\`\`bash
+chmod +x install-deps.sh
+./install-deps.sh
+\`\`\`
+
+Equivalent apt command:
+\`\`\`bash
+sudo apt-get update -qq
+sudo apt-get install -y -qq ${install_packages}
+\`\`\`
 
 ### Run the Qt wallet:
 \`\`\`bash
@@ -542,26 +844,26 @@ Extract the release folder anywhere you like and run it in place. No system-wide
 
 ### Copy daemon binaries:
 \`\`\`bash
+mkdir -p ~/.local/bin
 cp blakecoind blakecoin-cli blakecoin-tx ~/.local/bin/
 \`\`\`
 
 ### Install the Qt wallet:
 \`\`\`bash
-mkdir -p ~/.local/opt/blakecoin-qt
-cp -a blakecoin-qt .runtime ~/.local/opt/blakecoin-qt/
-ln -sf ~/.local/opt/blakecoin-qt/blakecoin-qt ~/.local/bin/blakecoin-qt
+mkdir -p ~/.local/bin
+${qt_copy_block}
 \`\`\`
-
-The hidden \`.runtime/\` folder must stay next to \`blakecoin-qt\`. The launcher will not start without it.
 
 ### Install desktop entry and icon:
 
-This step only adds a Show Apps / application-menu launcher. It does not install the wallet by itself.
-Run the Qt wallet install step above first so \`blakecoin-qt\` resolves from \`~/.local/bin/\` and the hidden \`.runtime/\` folder stays beside it.
+This step only adds a Show Apps / application-menu launcher. Copy \`blakecoin-qt\` into \`~/.local/bin/\` first so the desktop entry resolves correctly.
+${qt_desktop_note}
 
 \`\`\`bash
+mkdir -p ~/.local/bin
 mkdir -p ~/.local/share/applications
 mkdir -p ~/.local/share/icons/hicolor/256x256/apps
+${qt_copy_block}
 cp blakecoin.desktop ~/.local/share/applications/
 cp blakecoin-256.png ~/.local/share/icons/hicolor/256x256/apps/blakecoin-qt.png
 
@@ -585,260 +887,315 @@ On first run, a config file will be generated at \`~/.blakecoin/blakecoin.conf\`
 
 Built on Ubuntu ${ubuntu_ver}.
 EOF
+            ;;
+        *)
+            error "Unknown Linux readme target: $target"
+            exit 1
+            ;;
+    esac
 }
 
-write_windows_release_readme() {
+cleanup_linux_native_output_root() {
+    local stale_paths=()
+
+    mkdir -p "$OUTPUT_BASE"
+
+    rm -f \
+        "$OUTPUT_BASE/$DAEMON_NAME" \
+        "$OUTPUT_BASE/$CLI_NAME" \
+        "$OUTPUT_BASE/$TX_NAME" \
+        "$OUTPUT_BASE/$QT_NAME" \
+        "$OUTPUT_BASE/${QT_NAME}-bin" \
+        "$OUTPUT_BASE/install-deps.sh" \
+        "$OUTPUT_BASE/${COIN_NAME}.desktop" \
+        "$OUTPUT_BASE/${COIN_NAME}-256.png" \
+        "$OUTPUT_BASE/README.md"
+    rm -rf "$OUTPUT_BASE/.runtime" "$OUTPUT_BASE/lib" "$OUTPUT_BASE/plugins"
+    rm -rf "$OUTPUT_BASE/native"
+
+    shopt -s nullglob
+    stale_paths=(
+        "$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64
+        "$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64-daemon
+        "$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64-qt
+        "$OUTPUT_BASE"/blakecoin-v${VERSION}-ubuntu-*-x86_64.tar.gz
+    )
+    shopt -u nullglob
+
+    if [[ ${#stale_paths[@]} -gt 0 ]]; then
+        rm -rf "${stale_paths[@]}"
+    fi
+}
+
+cleanup_windows_native_output_root() {
+    mkdir -p "$OUTPUT_BASE"
+
+    rm -f \
+        "$OUTPUT_BASE/${DAEMON_NAME}.exe" \
+        "$OUTPUT_BASE/${CLI_NAME}.exe" \
+        "$OUTPUT_BASE/${TX_NAME}.exe" \
+        "$OUTPUT_BASE/${QT_NAME}.exe" \
+        "$OUTPUT_BASE/qt.conf" \
+        "$OUTPUT_BASE/build-info.txt"
+    rm -rf \
+        "$OUTPUT_BASE/platforms" \
+        "$OUTPUT_BASE/windows-native"
+
+    shopt -s nullglob
+    local stale_files=(
+        "$OUTPUT_BASE"/*.dll
+        "$OUTPUT_BASE"/${DAEMON_NAME}-${VERSION}.exe
+        "$OUTPUT_BASE"/${CLI_NAME}-${VERSION}.exe
+        "$OUTPUT_BASE"/${TX_NAME}-${VERSION}.exe
+        "$OUTPUT_BASE"/${QT_NAME}-${VERSION}.exe
+    )
+    shopt -u nullglob
+
+    if [[ ${#stale_files[@]} -gt 0 ]]; then
+        rm -f "${stale_files[@]}"
+    fi
+}
+
+cleanup_simple_output_root() {
+    mkdir -p "$OUTPUT_BASE"
+
+    rm -f \
+        "$OUTPUT_BASE/$DAEMON_NAME" \
+        "$OUTPUT_BASE/$CLI_NAME" \
+        "$OUTPUT_BASE/$TX_NAME" \
+        "$OUTPUT_BASE/$QT_NAME" \
+        "$OUTPUT_BASE/${QT_NAME}-bin" \
+        "$OUTPUT_BASE/${DAEMON_NAME}.exe" \
+        "$OUTPUT_BASE/${CLI_NAME}.exe" \
+        "$OUTPUT_BASE/${TX_NAME}.exe" \
+        "$OUTPUT_BASE/${QT_NAME}.exe" \
+        "$OUTPUT_BASE/${DAEMON_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${CLI_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${TX_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${QT_NAME}-${VERSION}" \
+        "$OUTPUT_BASE/${DAEMON_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/${CLI_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/${TX_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/${QT_NAME}-${VERSION}.exe" \
+        "$OUTPUT_BASE/install-deps.sh" \
+        "$OUTPUT_BASE/${COIN_NAME}.desktop" \
+        "$OUTPUT_BASE/${COIN_NAME}-256.png" \
+        "$OUTPUT_BASE/blakecoin.conf" \
+        "$OUTPUT_BASE/qt.conf" \
+        "$OUTPUT_BASE/README.md" \
+        "$OUTPUT_BASE/build-info.txt"
+
+    rm -rf \
+        "$OUTPUT_BASE/.runtime" \
+        "$OUTPUT_BASE/lib" \
+        "$OUTPUT_BASE/plugins" \
+        "$OUTPUT_BASE/platforms" \
+        "$OUTPUT_BASE/Blakecoin-Qt.app" \
+        "$OUTPUT_BASE/native" \
+        "$OUTPUT_BASE/windows" \
+        "$OUTPUT_BASE/macos" \
+        "$OUTPUT_BASE/windows-native" \
+        "$OUTPUT_BASE/macos-native" \
+        "$OUTPUT_BASE/daemon" \
+        "$OUTPUT_BASE/qt"
+
+    shopt -s nullglob
+    local stale_dlls=("$OUTPUT_BASE"/*.dll)
+    shopt -u nullglob
+    if [[ ${#stale_dlls[@]} -gt 0 ]]; then
+        rm -f "${stale_dlls[@]}"
+    fi
+}
+
+normalize_windows_source_timestamps() {
+    [[ -d "$SCRIPT_DIR" ]] || return 0
+
+    info "Normalizing native Windows source timestamps..."
+    find "$SCRIPT_DIR" -type f \
+        -not -path "$SCRIPT_DIR/.git/*" \
+        -not -path "$SCRIPT_DIR/outputs/*" \
+        -exec touch -c {} + 2>/dev/null || true
+}
+
+stage_linux_qt_runtime_bundle() {
+    local qt_source_binary="$1"
+    local package_dir="$2"
+    local stage_dir=""
+
+    [[ -x "$qt_source_binary" ]] || {
+        error "Qt source binary not found: $qt_source_binary"
+        exit 1
+    }
+
+    stage_dir=$(mktemp -d)
+    cp "$qt_source_binary" "$stage_dir/${QT_NAME}-${VERSION}"
+    bundle_linux_qt_runtime "$stage_dir"
+
+    mkdir -p "$package_dir/.runtime"
+    cp -a "$stage_dir/.runtime/." "$package_dir/.runtime/"
+    if [[ -f "$package_dir/.runtime/${QT_NAME}-bin-${VERSION}" ]]; then
+        mv "$package_dir/.runtime/${QT_NAME}-bin-${VERSION}" "$package_dir/.runtime/${QT_NAME}-bin"
+    fi
+
+    rm -f "$package_dir/$QT_NAME"
+    compile_linux_qt_launcher "$package_dir/$QT_NAME"
+    rm -rf "$stage_dir"
+}
+
+install_linux_desktop_launcher() {
+    local qt_bundle_dir="$1"
+    local desktop_dir="$HOME/.local/share/applications"
+    local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+    local icon_source="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
+
+    mkdir -p "$desktop_dir" "$icon_dir"
+    if [[ -f "$icon_source" ]]; then
+        cp "$icon_source" "$icon_dir/${COIN_NAME}.png"
+    fi
+    cat > "$desktop_dir/${QT_NAME}.desktop" <<DEOF
+[Desktop Entry]
+Type=Application
+Name=$COIN_NAME_UPPER
+Icon=$icon_dir/${COIN_NAME}.png
+Exec=$qt_bundle_dir/$QT_NAME
+Terminal=false
+Categories=Finance;Network;
+StartupWMClass=${QT_NAME}
+DEOF
+    chmod +x "$desktop_dir/${QT_NAME}.desktop"
+    info "Desktop launcher installed — $COIN_NAME_UPPER will appear in Activities search"
+}
+
+detect_native_docker_ubuntu_version() {
+    local version=""
+
+    case "$DOCKER_NATIVE" in
+        *native-base:20.04*) version="20.04" ;;
+        *native-base:22.04*) version="22.04" ;;
+        *native-base:24.04*) version="24.04" ;;
+        *native-base:25.10*) version="25.10" ;;
+    esac
+
+    if [[ -n "$version" ]]; then
+        printf '%s\n' "$version"
+        return 0
+    fi
+
+    docker run --rm "$DOCKER_NATIVE" /bin/bash -lc '. /etc/os-release >/dev/null 2>&1 && printf "%s\n" "$VERSION_ID"' 2>/dev/null || true
+}
+
+write_appimage_bundle_readme() {
     local readme_path="$1"
 
     cat > "$readme_path" <<EOF
-# Blakecoin v${VERSION} - Windows x86_64
+# Blakecoin v${VERSION} - Linux AppImage
+
+## Contents
+
+- ${APPIMAGE_PUBLIC_NAME}
+- README.md
+- build-info.txt
 
 ## Quick Start
 
-Extract the zip anywhere you like and run the executables in place.
+Make the AppImage executable and run it:
 
-### Run the Qt wallet:
-\`\`\`powershell
-.\blakecoin-qt-${VERSION}.exe
+\`\`\`bash
+chmod +x ${APPIMAGE_PUBLIC_NAME}
+./${APPIMAGE_PUBLIC_NAME}
 \`\`\`
 
-### Run the daemon:
-\`\`\`powershell
-.\blakecoind-${VERSION}.exe -daemon
-.\blakecoin-cli-${VERSION}.exe getinfo
+## Ubuntu Direct Launch Requirements
+
+- Ubuntu 22.04.5: \`sudo apt install libfuse2\`
+- Ubuntu 24.04.4: \`sudo apt install libfuse2t64\`
+- Ubuntu 25.10: \`sudo apt install libfuse2t64\`
+
+If the host is missing that package, direct AppImage startup fails with:
+
+\`\`\`text
+dlopen(): error loading libfuse.so.2
 \`\`\`
 
-### Other tools:
-\`\`\`powershell
-.\blakecoin-tx-${VERSION}.exe -help
+## Fallback Launch
+
+\`\`\`bash
+./${APPIMAGE_PUBLIC_NAME} --appimage-extract-and-run
 \`\`\`
 
 ## Notes
 
-- These Windows executables are intended to be self-contained.
-- No sidecar DLLs or plugin folders are required in the public release.
-
-## Build Info
-
-Built with MXE cross-build on Linux.
+- This AppImage is intended for Ubuntu 22.04 and newer.
+- Ubuntu 20.04 users should use the native Ubuntu 20.04 build in \`outputs/\`.
 EOF
 }
 
-write_appimage_release_desktop() {
-    local desktop_path="$1"
-
-    cat > "$desktop_path" <<EOF
-[Desktop Entry]
-Type=Application
-Name=Blakecoin Qt AppImage
-Comment=Blakecoin Cryptocurrency Wallet (AppImage bundle)
-Exec=${APPIMAGE_PUBLIC_NAME}
-Icon=blakecoin-qt
-Terminal=false
-Categories=Finance;Network;
-EOF
-}
-
-write_appimage_release_readme() {
-    local readme_path="$1"
-
-    cat > "$readme_path" <<EOF
-# Blakecoin v${VERSION} - AppImage Bundle (Ubuntu 22+)
-
-## Quick Start
-
-Extract the release folder anywhere you like and run it in place.
-
-### Run the wallet:
-\`\`\`bash
-./${APPIMAGE_PUBLIC_NAME}
-\`\`\`
-
-This launcher automatically:
-- uses extract-and-run mode so fresh Ubuntu 22.04 and 24.04 installs do not need \`libfuse2\`
-- forces XWayland-compatible Qt settings on Wayland sessions when needed
-- starts the hidden AppImage payload from the bundled \`.runtime/\` folder
-
-## Important Notes
-
-- This AppImage bundle is intended for Ubuntu 22.04 and newer.
-- Ubuntu 20.04 users should use the native Ubuntu 20 release instead.
-- The hidden \`.runtime/\` folder must stay next to \`${APPIMAGE_PUBLIC_NAME}\`.
-
-## Optional Desktop Integration
-
-If you want a Show Apps launcher:
-
-\`\`\`bash
-mkdir -p ~/.local/opt/blakecoin-appimage
-cp -a ${APPIMAGE_PUBLIC_NAME} .runtime ~/.local/opt/blakecoin-appimage/
-mkdir -p ~/.local/share/applications
-mkdir -p ~/.local/share/icons/hicolor/256x256/apps
-cp blakecoin.desktop ~/.local/share/applications/
-cp blakecoin-256.png ~/.local/share/icons/hicolor/256x256/apps/blakecoin-qt.png
-\`\`\`
-
-The desktop file assumes \`${APPIMAGE_PUBLIC_NAME}\` is on your path or in the same folder used for desktop integration.
-
-## Build Info
-
-Built on Ubuntu 22.04.
-EOF
-}
-
-package_appimage_release_bundle() {
-    local raw_appimage_path="$1"
-    local launcher_path="$2"
-    local release_root="$OUTPUT_BASE/release"
-    local package_name="$APPIMAGE_RELEASE_DIR_NAME"
-    local package_dir="$release_root/$package_name"
-    local tar_path="$release_root/${APPIMAGE_RELEASE_ARCHIVE_NAME}"
-    local legacy_tar_path="$release_root/blakecoin-v${VERSION}-appimage-ubuntu-22plus-x86_64.tar.gz"
-    local stale_raw_release_path="$release_root/${APPIMAGE_PUBLIC_NAME}"
-    local icon_source="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
-
-    [[ -f "$raw_appimage_path" ]] || {
-        error "Raw AppImage not found for release bundle: $raw_appimage_path"
-        exit 1
-    }
-
-    [[ -f "$launcher_path" ]] || {
-        error "AppImage launcher not found for release bundle: $launcher_path"
-        exit 1
-    }
-
-    rm -rf "$package_dir"
-    mkdir -p "$package_dir/.runtime"
-
-    cp "$launcher_path" "$package_dir/${APPIMAGE_PUBLIC_NAME}"
-    cp "$raw_appimage_path" "$package_dir/.runtime/${APPIMAGE_PAYLOAD_NAME}"
-
-    if [[ -f "$icon_source" ]]; then
-        cp "$icon_source" "$package_dir/blakecoin-256.png"
-    fi
-
-    write_appimage_release_desktop "$package_dir/blakecoin.desktop"
-    write_appimage_release_readme "$package_dir/README.md"
-
-    rm -f "$tar_path" "$legacy_tar_path" "$stale_raw_release_path"
-    (
-        cd "$release_root"
-        tar -czf "$tar_path" "$package_name"
-    )
-
-    success "AppImage release folder created: $package_dir"
-    success "AppImage release archive created: $tar_path"
-}
-
-package_linux_release_from_native() {
+finalize_linux_native_output() {
     local ubuntu_ver="$1"
-    local release_root="$OUTPUT_BASE/release"
-    local package_name="blakecoin-v${VERSION}-ubuntu-${ubuntu_ver}-x86_64"
-    local package_dir="$release_root/$package_name"
-    local tar_path="$release_root/${package_name}.tar.gz"
-    local native_daemon_dir="$OUTPUT_BASE/native/daemon"
-    local native_qt_dir="$OUTPUT_BASE/native/qt"
-    local runtime_source_dir="$native_qt_dir/.runtime"
-    local qt_source_binary="$runtime_source_dir/${QT_NAME}-bin-${VERSION}"
+    local target="$2"
+    local daemon_source="$3"
+    local cli_source="$4"
+    local tx_source="$5"
+    local qt_source_binary="$6"
+    local install_packages="${7:-}"
+    local output_dir=""
     local icon_source="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
 
-    if [[ ! -x "$qt_source_binary" ]]; then
-        warn "Skipping Linux release packaging: Qt runtime binary not found in $runtime_source_dir"
-        return 0
+    ubuntu_ver="${ubuntu_ver:-unknown}"
+    output_dir="$(linux_output_dir "$ubuntu_ver")"
+
+    case "$target" in
+        daemon|both)
+            for source_file in "$daemon_source" "$cli_source" "$tx_source"; do
+                [[ -x "$source_file" ]] || {
+                    error "Missing Linux daemon artifact: $source_file"
+                    exit 1
+                }
+            done
+            ;;
+    esac
+
+    case "$target" in
+        qt|both)
+            [[ -x "$qt_source_binary" ]] || {
+                error "Missing Linux Qt artifact: $qt_source_binary"
+                exit 1
+            }
+            ;;
+    esac
+
+    cleanup_legacy_output_root
+    cleanup_target_output_dir "$output_dir"
+
+    if [[ "$target" == "daemon" || "$target" == "both" ]]; then
+        cp "$daemon_source" "$output_dir/$DAEMON_NAME"
+        cp "$cli_source" "$output_dir/$CLI_NAME"
+        cp "$tx_source" "$output_dir/$TX_NAME"
     fi
 
-    for source_file in \
-        "$native_daemon_dir/${DAEMON_NAME}-${VERSION}" \
-        "$native_daemon_dir/${CLI_NAME}-${VERSION}" \
-        "$native_daemon_dir/${TX_NAME}-${VERSION}"; do
-        if [[ ! -x "$source_file" ]]; then
-            warn "Skipping Linux release packaging: daemon artifact missing ($source_file)"
-            return 0
+    if [[ "$target" == "qt" || "$target" == "both" ]]; then
+        if [[ "$ubuntu_ver" == 20.04* ]]; then
+            cp "$qt_source_binary" "$output_dir/${QT_NAME}-bin"
+            compile_linux_qt_launcher "$output_dir/$QT_NAME" "${QT_NAME}-bin" 0
+        else
+            cp "$qt_source_binary" "$output_dir/$QT_NAME"
         fi
-    done
 
-    mkdir -p "$release_root"
-    rm -rf "$package_dir" "$tar_path"
-    mkdir -p "$package_dir/.runtime"
+        if [[ -f "$icon_source" ]]; then
+            cp "$icon_source" "$output_dir/${COIN_NAME}-256.png"
+        else
+            warn "Release icon source not found: $icon_source"
+        fi
 
-    cp "$native_daemon_dir/${DAEMON_NAME}-${VERSION}" "$package_dir/$DAEMON_NAME"
-    cp "$native_daemon_dir/${CLI_NAME}-${VERSION}" "$package_dir/$CLI_NAME"
-    cp "$native_daemon_dir/${TX_NAME}-${VERSION}" "$package_dir/$TX_NAME"
-    cp -a "$runtime_source_dir/." "$package_dir/.runtime/"
-    mv "$package_dir/.runtime/${QT_NAME}-bin-${VERSION}" "$package_dir/.runtime/${QT_NAME}-bin"
-
-    compile_linux_qt_launcher "$package_dir/$QT_NAME"
-
-    if [[ -f "$icon_source" ]]; then
-        cp "$icon_source" "$package_dir/${COIN_NAME}-256.png"
-    else
-        warn "Release icon source not found: $icon_source"
+        write_linux_release_desktop "$output_dir/${COIN_NAME}.desktop"
     fi
 
-    write_linux_release_desktop "$package_dir/${COIN_NAME}.desktop"
-    write_linux_release_readme "$package_dir/README.md" "$ubuntu_ver"
+    write_linux_install_deps_script "$output_dir/install-deps.sh" "$install_packages"
+    write_linux_release_readme "$output_dir/README.md" "$ubuntu_ver" "$target" "$install_packages"
+    CURRENT_OUTPUT_DIR="$output_dir"
+    GENERATE_CONFIG_AFTER_BUILD=1
 
-    (
-        cd "$package_dir"
-        tar -czf "$tar_path" .
-    )
-
-    success "Linux release folder created: $package_dir"
-    success "Linux release archive created: $tar_path"
-}
-
-package_windows_release_from_cross_build() {
-    local output_dir="$1"
-    local target="$2"
-    local release_root="$OUTPUT_BASE/release"
-    local zip_path="$release_root/${WINDOWS_RELEASE_ARCHIVE_NAME}"
-    local stage_dir=""
-    local qt_exe="$output_dir/qt/${QT_NAME}-${VERSION}.exe"
-    local daemon_exe="$output_dir/daemon/${DAEMON_NAME}-${VERSION}.exe"
-    local cli_exe="$output_dir/daemon/${CLI_NAME}-${VERSION}.exe"
-    local tx_exe="$output_dir/daemon/${TX_NAME}-${VERSION}.exe"
-
-    if [[ "$target" != "both" ]]; then
-        info "Skipping Windows release archive: only generated for --both builds."
-        return 0
-    fi
-
-    command -v zip >/dev/null 2>&1 || {
-        error "zip command not found. Install zip on the build host to create the Windows release archive."
-        exit 1
-    }
-
-    for required_file in "$qt_exe" "$daemon_exe" "$cli_exe" "$tx_exe"; do
-        [[ -f "$required_file" ]] || {
-            error "Windows release packaging requires: $required_file"
-            exit 1
-        }
-    done
-
-    mkdir -p "$release_root"
-    stage_dir=$(mktemp -d)
-
-    cp "$qt_exe" "$stage_dir/"
-    cp "$daemon_exe" "$stage_dir/"
-    cp "$cli_exe" "$stage_dir/"
-    cp "$tx_exe" "$stage_dir/"
-    write_windows_release_readme "$stage_dir/README.md"
-    write_build_info "$stage_dir" "windows" "both" "Docker: $DOCKER_WINDOWS (MXE)"
-
-    rm -f "$zip_path"
-    (
-        cd "$stage_dir"
-        zip -q -r "$zip_path" \
-            "README.md" \
-            "build-info.txt" \
-            "${QT_NAME}-${VERSION}.exe" \
-            "${DAEMON_NAME}-${VERSION}.exe" \
-            "${CLI_NAME}-${VERSION}.exe" \
-            "${TX_NAME}-${VERSION}.exe"
-    )
-
-    rm -rf "$stage_dir"
-    success "Windows release archive created: $zip_path"
+    success "Linux output files updated in: $output_dir"
 }
 
 bundle_linux_qt_runtime() {
@@ -889,7 +1246,8 @@ EOF
 }
 
 generate_config() {
-    local conf_path="$OUTPUT_BASE/$CONFIG_FILE"
+    local output_dir="${1:-$OUTPUT_BASE}"
+    local conf_path="$output_dir/$CONFIG_FILE"
     local data_dir="$HOME/.${COIN_NAME}"
     local data_conf_path="$data_dir/$CONFIG_FILE"
     local rpcuser rpcpassword peers=""
@@ -929,7 +1287,7 @@ generate_config() {
         fi
     }
 
-    mkdir -p "$OUTPUT_BASE" "$data_dir"
+    mkdir -p "$output_dir" "$data_dir"
     host_os="$(detect_os)"
     if [[ "$host_os" == "windows" ]]; then
         daemon_line=""
@@ -1054,7 +1412,7 @@ build_windows() {
     local jobs="$2"
     local docker_mode="$3"
     local container_name="win-${COIN_NAME}-0152-build"
-    local output_dir="$OUTPUT_BASE/windows"
+    local output_dir=""
 
     echo ""
     echo "============================================"
@@ -1064,9 +1422,11 @@ build_windows() {
     echo "  Strategy: MXE + autotools (pre-built libs)"
     echo ""
 
+    output_dir="$(windows_output_dir)"
     ensure_windows_icon_assets
     ensure_docker_image "$DOCKER_WINDOWS" "$docker_mode"
-    mkdir -p "$output_dir/daemon" "$output_dir/qt"
+    cleanup_legacy_output_root
+    cleanup_target_output_dir "$output_dir"
     docker rm -f "$container_name" 2>/dev/null || true
 
     # Copy source to temp dir for volume-mount
@@ -1223,19 +1583,19 @@ ls -lh src/blakecoind.exe src/qt/blakecoin-qt.exe src/blakecoin-cli.exe src/blak
     # Extract binaries
     if [[ "$target" == "daemon" || "$target" == "both" ]]; then
         info "Extracting daemon binaries..."
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoind.exe" "$output_dir/daemon/blakecoind-${VERSION}.exe" 2>/dev/null || true
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-cli.exe" "$output_dir/daemon/blakecoin-cli-${VERSION}.exe" 2>/dev/null || true
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-tx.exe" "$output_dir/daemon/blakecoin-tx-${VERSION}.exe" 2>/dev/null || true
-        write_build_info "$output_dir/daemon" "windows" "daemon" "Docker: $DOCKER_WINDOWS (MXE)"
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoind.exe" "$output_dir/blakecoind-${VERSION}.exe" 2>/dev/null || true
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-cli.exe" "$output_dir/blakecoin-cli-${VERSION}.exe" 2>/dev/null || true
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-tx.exe" "$output_dir/blakecoin-tx-${VERSION}.exe" 2>/dev/null || true
     fi
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
         info "Extracting Qt wallet..."
-        docker cp "$container_name:/build/$COIN_NAME/src/qt/blakecoin-qt.exe" "$output_dir/qt/blakecoin-qt-${VERSION}.exe" 2>/dev/null || true
-        write_build_info "$output_dir/qt" "windows" "qt" "Docker: $DOCKER_WINDOWS (MXE)"
+        docker cp "$container_name:/build/$COIN_NAME/src/qt/blakecoin-qt.exe" "$output_dir/blakecoin-qt-${VERSION}.exe" 2>/dev/null || true
     fi
 
-    package_windows_release_from_cross_build "$output_dir" "$target"
+    write_build_info "$output_dir" "windows" "$target" "Docker: $DOCKER_WINDOWS (MXE)"
+    CURRENT_OUTPUT_DIR="$output_dir"
+    GENERATE_CONFIG_AFTER_BUILD=0
 
     docker rm -f "$container_name" 2>/dev/null || true
     docker run --rm -v "$tmpdir:/cleanup" alpine rm -rf /cleanup 2>/dev/null || rm -rf "$tmpdir" 2>/dev/null || true
@@ -1244,11 +1604,8 @@ ls -lh src/blakecoind.exe src/qt/blakecoin-qt.exe src/blakecoin-cli.exe src/blak
     echo "============================================"
     echo "  BUILD SUCCESSFUL — Windows"
     echo "  Output: $output_dir/"
-    if [[ "$target" == "both" ]]; then
-        echo "  Release: $OUTPUT_BASE/release/${WINDOWS_RELEASE_ARCHIVE_NAME}"
-    fi
     echo "============================================"
-    ls -lh "$output_dir"/daemon/*.exe "$output_dir"/qt/*.exe 2>/dev/null || true
+    ls -lh "$output_dir"/*.exe "$output_dir"/build-info.txt 2>/dev/null || true
 }
 
 # =============================================================================
@@ -1261,7 +1618,7 @@ build_macos_cross() {
     local jobs="$2"
     local docker_mode="$3"
     local container_name="mac-${COIN_NAME}-0152-build"
-    local output_dir="$OUTPUT_BASE/macos"
+    local output_dir=""
 
     echo ""
     echo "============================================"
@@ -1271,8 +1628,10 @@ build_macos_cross() {
     echo "  Strategy: osxcross + autotools (pre-built libs)"
     echo ""
 
+    output_dir="$(macos_output_dir)"
     ensure_docker_image "$DOCKER_MACOS" "$docker_mode"
-    mkdir -p "$output_dir/daemon" "$output_dir/qt"
+    cleanup_legacy_output_root
+    cleanup_target_output_dir "$output_dir"
     docker rm -f "$container_name" 2>/dev/null || true
 
     # Copy source to temp dir
@@ -1526,29 +1885,31 @@ fi
     # Extract binaries
     if [[ "$target" == "daemon" || "$target" == "both" ]]; then
         info "Extracting daemon binaries..."
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoind" "$output_dir/daemon/blakecoind-${VERSION}" 2>/dev/null || true
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-cli" "$output_dir/daemon/blakecoin-cli-${VERSION}" 2>/dev/null || true
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-tx" "$output_dir/daemon/blakecoin-tx-${VERSION}" 2>/dev/null || true
-        write_build_info "$output_dir/daemon" "macos" "daemon" "Docker: $DOCKER_MACOS (osxcross)"
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoind" "$output_dir/blakecoind-${VERSION}" 2>/dev/null || true
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-cli" "$output_dir/blakecoin-cli-${VERSION}" 2>/dev/null || true
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-tx" "$output_dir/blakecoin-tx-${VERSION}" 2>/dev/null || true
     fi
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
         info "Extracting Qt wallet (.app bundle)..."
         local app_name="Blakecoin-Qt.app"
-        rm -rf "$output_dir/qt/$app_name" 2>/dev/null || true
-        if docker cp "$container_name:/build/$COIN_NAME/$app_name" "$output_dir/qt/$app_name" 2>/dev/null; then
+        rm -rf "$output_dir/$app_name" 2>/dev/null || true
+        if docker cp "$container_name:/build/$COIN_NAME/$app_name" "$output_dir/$app_name" 2>/dev/null; then
             # Ensure binary inside .app is executable (docker cp can lose +x)
-            find "$output_dir/qt/$app_name" -path "*/Contents/MacOS/*" -type f -exec chmod +x {} + 2>/dev/null || true
-            success "macOS app bundle extracted to $output_dir/qt/"
-            ls -lh "$output_dir/qt/$app_name/Contents/MacOS/" 2>/dev/null || true
+            find "$output_dir/$app_name" -path "*/Contents/MacOS/*" -type f -exec chmod +x {} + 2>/dev/null || true
+            success "macOS app bundle extracted to $output_dir/"
+            ls -lh "$output_dir/$app_name/Contents/MacOS/" 2>/dev/null || true
         else
             error "Could not find .app bundle in container"
             docker exec "$container_name" find /build/$COIN_NAME -name "*.app" -type d 2>/dev/null || true
         fi
         # Also copy raw binary for convenience
-        docker cp "$container_name:/build/$COIN_NAME/src/qt/blakecoin-qt" "$output_dir/qt/blakecoin-qt-${VERSION}" 2>/dev/null || true
-        write_build_info "$output_dir/qt" "macos" "qt" "Docker: $DOCKER_MACOS (osxcross)"
+        docker cp "$container_name:/build/$COIN_NAME/src/qt/blakecoin-qt" "$output_dir/blakecoin-qt-${VERSION}" 2>/dev/null || true
     fi
+
+    write_build_info "$output_dir" "macos" "$target" "Docker: $DOCKER_MACOS (osxcross)"
+    CURRENT_OUTPUT_DIR="$output_dir"
+    GENERATE_CONFIG_AFTER_BUILD=0
 
     docker rm -f "$container_name" 2>/dev/null || true
     docker run --rm -v "$tmpdir:/cleanup" alpine rm -rf /cleanup 2>/dev/null || rm -rf "$tmpdir" 2>/dev/null || true
@@ -1558,7 +1919,7 @@ fi
     echo "  BUILD SUCCESSFUL — macOS"
     echo "  Output: $output_dir/"
     echo "============================================"
-    ls -lh "$output_dir"/daemon/* "$output_dir"/qt/* 2>/dev/null || true
+    ls -lh "$output_dir"/* 2>/dev/null || true
 }
 
 # =============================================================================
@@ -1569,9 +1930,9 @@ build_appimage() {
     local jobs="$1"
     local docker_mode="$2"
     local container_name="appimage-${COIN_NAME}-0152-build"
-    local output_dir="$OUTPUT_BASE/linux-appimage/qt"
-    local raw_appimage_path="$output_dir/${APPIMAGE_PUBLIC_NAME}"
-    local launcher_path="$output_dir/${COIN_NAME}-appimage-launcher"
+    local output_dir
+    output_dir="$(appimage_output_dir)"
+    local appimage_path="$output_dir/${APPIMAGE_PUBLIC_NAME}"
 
     echo ""
     echo "============================================"
@@ -1581,6 +1942,9 @@ build_appimage() {
     echo ""
 
     ensure_docker_image "$DOCKER_APPIMAGE" "$docker_mode"
+    cleanup_legacy_output_root
+    rm -rf "$output_dir" "$OUTPUT_BASE/linux-appimage"
+    rm -f "$output_dir/${APPIMAGE_PUBLIC_NAME}.tar.gz"
     mkdir -p "$output_dir"
     docker rm -f "$container_name" 2>/dev/null || true
 
@@ -1851,12 +2215,6 @@ ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool --no-appstream "$APPDIR" \
     "/build/output/'"$COIN_NAME_UPPER"'-0.15.2-x86_64.AppImage"
 chmod +x "/build/output/'"$COIN_NAME_UPPER"'-0.15.2-x86_64.AppImage"
 
-echo ">>> Building AppImage launcher..."
-gcc -O2 -s -Wall -Wextra -no-pie \
-    "/build/'"$COIN_NAME"'/contrib/appimage-release/blakecoin-appimage-launcher.c" \
-    -o "/build/output/'"$COIN_NAME"'-appimage-launcher"
-chmod +x "/build/output/'"$COIN_NAME"'-appimage-launcher"
-
 echo ">>> AppImage build complete!"
 ls -lh /build/output/
 '
@@ -1865,33 +2223,29 @@ ls -lh /build/output/
     docker start -a "$container_name"
 
     info "Extracting AppImage..."
-    if docker cp "$container_name:/build/output/${APPIMAGE_PUBLIC_NAME}" "$raw_appimage_path" 2>/dev/null; then
+    if docker cp "$container_name:/build/output/${APPIMAGE_PUBLIC_NAME}" "$appimage_path" 2>/dev/null; then
         success "AppImage extracted to $output_dir/"
-        ls -lh "$raw_appimage_path"
+        ls -lh "$appimage_path"
     else
         error "Could not find AppImage in container"
         docker rm -f "$container_name" 2>/dev/null || true
         exit 1
     fi
 
-    if docker cp "$container_name:/build/output/${COIN_NAME}-appimage-launcher" "$launcher_path" 2>/dev/null; then
-        success "AppImage launcher extracted to $output_dir/"
-    else
-        error "Could not find AppImage launcher in container"
-        docker rm -f "$container_name" 2>/dev/null || true
-        exit 1
-    fi
-
     write_build_info "$output_dir" "appimage" "qt" "Docker: $DOCKER_APPIMAGE"
-    package_appimage_release_bundle "$raw_appimage_path" "$launcher_path"
+    write_appimage_bundle_readme "$output_dir/README.md"
+    CURRENT_OUTPUT_DIR="$output_dir"
+    GENERATE_CONFIG_AFTER_BUILD=0
     docker rm -f "$container_name" 2>/dev/null || true
     docker run --rm -v "$tmpdir:/cleanup" alpine rm -rf /cleanup 2>/dev/null || rm -rf "$tmpdir" 2>/dev/null || true
 
     echo ""
     echo "============================================"
     echo "  BUILD SUCCESSFUL — AppImage"
-    echo "  Raw Output: $raw_appimage_path"
-    echo "  Release: $OUTPUT_BASE/release/${APPIMAGE_RELEASE_ARCHIVE_NAME}"
+    echo "  Output: $appimage_path"
+    echo "  Note:   Ubuntu 22.04.5 direct launch needs libfuse2"
+    echo "          Ubuntu 24.04.4 / 25.10 direct launch needs libfuse2t64"
+    echo "          Otherwise use --appimage-extract-and-run"
     echo "============================================"
 }
 
@@ -1903,7 +2257,11 @@ build_native_docker() {
     local target="$1"
     local jobs="$2"
     local docker_mode="$3"
-    local output_dir="$OUTPUT_BASE/native"
+    local ubuntu_ver=""
+    local final_output_dir=""
+    local install_packages=""
+    local daemon_stage="$OUTPUT_BASE/.linux-native-stage/daemon"
+    local qt_stage="$OUTPUT_BASE/.linux-native-stage/qt"
 
     echo ""
     echo "============================================"
@@ -1914,7 +2272,12 @@ build_native_docker() {
     echo ""
 
     ensure_docker_image "$DOCKER_NATIVE" "$docker_mode"
-    mkdir -p "$output_dir/daemon" "$output_dir/qt"
+    ubuntu_ver="$(detect_native_docker_ubuntu_version)"
+    cleanup_legacy_output_root
+    rm -rf "$OUTPUT_BASE/native" "$OUTPUT_BASE/.linux-native-stage"
+    mkdir -p "$daemon_stage" "$qt_stage"
+    resolve_native_linux_packages "$target"
+    install_packages="$NATIVE_LINUX_ALL_DEPS_STR"
 
     # Copy source to temp dir
     info "Copying source tree to temp build dir..."
@@ -1997,27 +2360,35 @@ ls -lh src/blakecoind src/qt/blakecoin-qt src/blakecoin-cli src/blakecoin-tx 2>/
     # Extract binaries
     if [[ "$target" == "daemon" || "$target" == "both" ]]; then
         info "Extracting daemon binaries..."
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoind" "$output_dir/daemon/blakecoind-${VERSION}" 2>/dev/null || true
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-cli" "$output_dir/daemon/blakecoin-cli-${VERSION}" 2>/dev/null || true
-        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-tx" "$output_dir/daemon/blakecoin-tx-${VERSION}" 2>/dev/null || true
-        write_build_info "$output_dir/daemon" "native-docker" "daemon" "Docker: $DOCKER_NATIVE"
-        success "Daemon binaries in $output_dir/daemon/"
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoind" "$daemon_stage/blakecoind-${VERSION}" 2>/dev/null || true
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-cli" "$daemon_stage/blakecoin-cli-${VERSION}" 2>/dev/null || true
+        docker cp "$container_name:/build/$COIN_NAME/src/blakecoin-tx" "$daemon_stage/blakecoin-tx-${VERSION}" 2>/dev/null || true
     fi
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
         info "Extracting Qt wallet..."
-        docker cp "$container_name:/build/$COIN_NAME/src/qt/blakecoin-qt" "$output_dir/qt/blakecoin-qt-${VERSION}" 2>/dev/null || true
-        write_build_info "$output_dir/qt" "native-docker" "qt" "Docker: $DOCKER_NATIVE"
-        success "Qt wallet in $output_dir/qt/"
+        docker cp "$container_name:/build/$COIN_NAME/src/qt/blakecoin-qt" "$qt_stage/blakecoin-qt-${VERSION}" 2>/dev/null || true
     fi
+
+    finalize_linux_native_output \
+        "$ubuntu_ver" \
+        "$target" \
+        "$daemon_stage/blakecoind-${VERSION}" \
+        "$daemon_stage/blakecoin-cli-${VERSION}" \
+        "$daemon_stage/blakecoin-tx-${VERSION}" \
+        "$qt_stage/blakecoin-qt-${VERSION}" \
+        "$install_packages"
+
+    final_output_dir="$(linux_output_dir "$ubuntu_ver")"
 
     docker rm -f "$container_name" 2>/dev/null || true
     docker run --rm -v "$tmpdir:/cleanup" alpine rm -rf /cleanup 2>/dev/null || rm -rf "$tmpdir" 2>/dev/null || true
+    rm -rf "$OUTPUT_BASE/.linux-native-stage"
 
     echo ""
     echo "============================================"
     echo "  BUILD SUCCESSFUL — Native (Docker)"
-    echo "  Output: $output_dir/"
+    echo "  Output: $final_output_dir/"
     echo "============================================"
 }
 
@@ -2042,7 +2413,8 @@ build_native_direct() {
 build_native_linux_direct() {
     local target="$1"
     local jobs="$2"
-    local output_dir="$OUTPUT_BASE/native"
+    local final_output_dir=""
+    local install_packages=""
 
     echo ""
     echo "============================================"
@@ -2057,44 +2429,13 @@ build_native_linux_direct() {
     fi
     info "Detected OS: Ubuntu ${ubuntu_ver:-unknown}"
 
-    # Define required packages
-    local build_deps="build-essential libtool-bin autotools-dev automake pkg-config curl"
-
-    # BDB: prefer 4.8 for wallet portability, otherwise use the newest C++ dev package
-    # the distro exposes so configure can still find db_cxx.h.
-    local bdb_deps=""
-    local bdb48_candidate=""
-    local bdb53pp_candidate=""
-    local bdb_generic_candidate=""
-    bdb48_candidate=$(apt-cache policy libdb4.8++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
-    bdb53pp_candidate=$(apt-cache policy libdb5.3++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
-    bdb_generic_candidate=$(apt-cache policy "libdb++-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')
-    if [[ -n "$bdb48_candidate" && "$bdb48_candidate" != "(none)" ]]; then
-        bdb_deps="libdb4.8-dev libdb4.8++-dev"
-        info "BDB 4.8 available — wallets will be portable"
-    elif [[ -n "$bdb53pp_candidate" && "$bdb53pp_candidate" != "(none)" ]]; then
-        bdb_deps="libdb5.3-dev libdb5.3++-dev"
-        info "BDB 4.8 not available — using libdb5.3++-dev (--with-incompatible-bdb will be applied)"
-    elif [[ -n "$bdb_generic_candidate" && "$bdb_generic_candidate" != "(none)" ]]; then
-        bdb_deps="libdb++-dev"
-        info "BDB 4.8 not available — using generic libdb++-dev (--with-incompatible-bdb will be applied)"
-    else
-        bdb_deps="libdb-dev"
-        warn "No Berkeley DB C++ dev package candidate detected; configure may fail unless db_cxx headers are already present"
-    fi
-
-    local lib_deps="libssl-dev libevent-dev $bdb_deps libminiupnpc-dev libprotobuf-dev protobuf-compiler libboost-all-dev"
-    local qt_deps=""
-    if [[ "$target" == "qt" || "$target" == "both" ]]; then
-        qt_deps="qtbase5-dev qttools5-dev qttools5-dev-tools libqrencode-dev"
-    fi
-
-    local all_deps="$build_deps $lib_deps $qt_deps"
+    resolve_native_linux_packages "$target"
+    install_packages="$NATIVE_LINUX_ALL_DEPS_STR"
 
     # Check and auto-install missing packages
     info "Checking and installing dependencies..."
     local missing_pkgs=()
-    for pkg in $all_deps; do
+    for pkg in "${NATIVE_LINUX_ALL_DEPS[@]}"; do
         dpkg -s "$pkg" &>/dev/null 2>&1 || missing_pkgs+=("$pkg")
     done
 
@@ -2106,7 +2447,8 @@ build_native_linux_direct() {
         info "All dependencies already installed"
     fi
 
-    mkdir -p "$output_dir/daemon" "$output_dir/qt"
+    cleanup_legacy_output_root
+    rm -rf "$OUTPUT_BASE/native"
 
     local configure_extra=""
     case "$target" in
@@ -2168,61 +2510,41 @@ QRC_EOF
     info "Building with $jobs jobs..."
     make -j"$jobs"
 
-    # Copy outputs
     if [[ "$target" == "daemon" || "$target" == "both" ]]; then
         strip src/blakecoind src/blakecoin-cli src/blakecoin-tx 2>/dev/null || true
-        cp src/blakecoind "$output_dir/daemon/blakecoind-${VERSION}"
-        cp src/blakecoin-cli "$output_dir/daemon/blakecoin-cli-${VERSION}"
-        cp src/blakecoin-tx "$output_dir/daemon/blakecoin-tx-${VERSION}"
-        write_build_info "$output_dir/daemon" "native-linux" "daemon" "$(detect_os_version linux)"
-        success "Daemon binaries in $output_dir/daemon/"
     fi
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
         strip src/qt/blakecoin-qt 2>/dev/null || true
-        cp src/qt/blakecoin-qt "$output_dir/qt/blakecoin-qt-${VERSION}"
-        bundle_linux_qt_runtime "$output_dir/qt"
-        write_build_info "$output_dir/qt" "native-linux" "qt" "$(detect_os_version linux)"
-        success "Qt wallet in $output_dir/qt/"
+    fi
 
-        case "$ubuntu_ver" in
-            20.04|22.04|24.04|25.10)
-                package_linux_release_from_native "$ubuntu_ver"
-                ;;
-        esac
+    finalize_linux_native_output \
+        "$ubuntu_ver" \
+        "$target" \
+        "$SCRIPT_DIR/src/blakecoind" \
+        "$SCRIPT_DIR/src/blakecoin-cli" \
+        "$SCRIPT_DIR/src/blakecoin-tx" \
+        "$SCRIPT_DIR/src/qt/blakecoin-qt" \
+        "$install_packages"
 
-        # Install desktop launcher
-        local desktop_dir="$HOME/.local/share/applications"
-        local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
-        mkdir -p "$desktop_dir" "$icon_dir"
-        if [[ -f "src/qt/res/icons/bitcoin.png" ]]; then
-            cp "src/qt/res/icons/bitcoin.png" "$icon_dir/${COIN_NAME}.png"
-        fi
-        cat > "$desktop_dir/${QT_NAME}.desktop" <<DEOF
-[Desktop Entry]
-Type=Application
-Name=$COIN_NAME_UPPER
-Icon=$icon_dir/${COIN_NAME}.png
-Exec=$output_dir/qt/${QT_NAME}-${VERSION}
-Terminal=false
-Categories=Finance;Network;
-StartupWMClass=${QT_NAME}
-DEOF
-        chmod +x "$desktop_dir/${QT_NAME}.desktop"
-        info "Desktop launcher installed — $COIN_NAME_UPPER will appear in Activities search"
+    final_output_dir="$(linux_output_dir "$ubuntu_ver")"
+
+    if [[ "$target" == "qt" || "$target" == "both" ]]; then
+        install_linux_desktop_launcher "$final_output_dir"
     fi
 
     echo ""
     echo "============================================"
     echo "  BUILD SUCCESSFUL — Native Linux"
-    echo "  Output: $output_dir/"
+    echo "  Output: $final_output_dir/"
     echo "============================================"
 }
 
 build_native_macos() {
     local target="$1"
     local jobs="$2"
-    local output_dir="$OUTPUT_BASE/native"
+    local output_dir
+    output_dir="$(macos_output_dir)"
     local app_name="Blakecoin-Qt.app"
     local native_dep_root="$SCRIPT_DIR/.native-macos-deps"
     local protobuf_version="3.12.4"
@@ -2255,7 +2577,8 @@ build_native_macos() {
     libevent_prefix=$(brew --prefix libevent)
     miniupnpc_prefix=$(brew --prefix miniupnpc)
 
-    mkdir -p "$output_dir/daemon" "$output_dir/qt"
+    cleanup_legacy_output_root
+    cleanup_target_output_dir "$output_dir"
     mkdir -p "$native_dep_root/src"
 
     local configure_extra=""
@@ -2386,20 +2709,19 @@ QRC_EOF
 
     if [[ "$target" == "daemon" || "$target" == "both" ]]; then
         strip src/blakecoind src/blakecoin-cli src/blakecoin-tx 2>/dev/null || true
-        cp src/blakecoind "$output_dir/daemon/blakecoind-${VERSION}"
-        cp src/blakecoin-cli "$output_dir/daemon/blakecoin-cli-${VERSION}"
-        cp src/blakecoin-tx "$output_dir/daemon/blakecoin-tx-${VERSION}"
-        write_build_info "$output_dir/daemon" "native-macos" "daemon" "$(detect_os_version macos)"
-        success "Daemon binaries in $output_dir/daemon/"
+        cp src/blakecoind "$output_dir/blakecoind-${VERSION}"
+        cp src/blakecoin-cli "$output_dir/blakecoin-cli-${VERSION}"
+        cp src/blakecoin-tx "$output_dir/blakecoin-tx-${VERSION}"
+        success "Daemon binaries in $output_dir/"
     fi
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
         strip src/qt/blakecoin-qt 2>/dev/null || true
-        cp src/qt/blakecoin-qt "$output_dir/qt/blakecoin-qt-${VERSION}"
+        cp src/qt/blakecoin-qt "$output_dir/blakecoin-qt-${VERSION}"
 
-        rm -rf "$output_dir/qt/$app_name"
-        mkdir -p "$output_dir/qt/$app_name/Contents/MacOS" "$output_dir/qt/$app_name/Contents/Resources"
-        cp src/qt/blakecoin-qt "$output_dir/qt/$app_name/Contents/MacOS/Blakecoin-Qt"
+        rm -rf "$output_dir/$app_name"
+        mkdir -p "$output_dir/$app_name/Contents/MacOS" "$output_dir/$app_name/Contents/Resources"
+        cp src/qt/blakecoin-qt "$output_dir/$app_name/Contents/MacOS/Blakecoin-Qt"
 
         local icons_dir="$SCRIPT_DIR/src/qt/res/icons"
         if [[ -f "$icons_dir/bitcoin.png" ]] && command -v sips &>/dev/null && command -v iconutil &>/dev/null; then
@@ -2413,11 +2735,11 @@ QRC_EOF
                 size2=$((size * 2))
                 sips -z "$size2" "$size2" "$icons_dir/bitcoin.png" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null 2>&1 || true
             done
-            iconutil -c icns "$iconset_dir" -o "$output_dir/qt/$app_name/Contents/Resources/blakecoin.icns" 2>/dev/null || true
+            iconutil -c icns "$iconset_dir" -o "$output_dir/$app_name/Contents/Resources/blakecoin.icns" 2>/dev/null || true
             rm -rf "$iconset_root"
         fi
 
-        cat > "$output_dir/qt/$app_name/Contents/Info.plist" <<PLIST_EOF
+        cat > "$output_dir/$app_name/Contents/Info.plist" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -2448,12 +2770,12 @@ PLIST_EOF
 
         if [[ -x "$qt5_prefix/bin/macdeployqt" ]]; then
             info "Bundling Qt frameworks with macdeployqt..."
-            "$qt5_prefix/bin/macdeployqt" "$output_dir/qt/$app_name" >/dev/null 2>&1 || warn "macdeployqt failed; leaving native bundle unmodified"
+            "$qt5_prefix/bin/macdeployqt" "$output_dir/$app_name" >/dev/null 2>&1 || warn "macdeployqt failed; leaving native bundle unmodified"
         fi
 
         info "Resolving transitive dylib dependencies for native macOS bundle..."
         bundle_macos_transitive_dylibs \
-            "$output_dir/qt/$app_name" \
+            "$output_dir/$app_name" \
             "$boost_prefix/lib" \
             "$openssl_prefix/lib" \
             "$bdb_prefix/lib" \
@@ -2461,10 +2783,13 @@ PLIST_EOF
             "$miniupnpc_prefix/lib" \
             "$qt5_prefix/lib"
 
-        codesign --force --deep --sign - "$output_dir/qt/$app_name" 2>/dev/null || true
-        write_build_info "$output_dir/qt" "native-macos" "qt" "$(detect_os_version macos)"
-        success "Qt wallet in $output_dir/qt/"
+        codesign --force --deep --sign - "$output_dir/$app_name" 2>/dev/null || true
+        success "Qt wallet in $output_dir/"
     fi
+
+    write_build_info "$output_dir" "native-macos" "$target" "$(detect_os_version macos)"
+    CURRENT_OUTPUT_DIR="$output_dir"
+    GENERATE_CONFIG_AFTER_BUILD=1
 
     echo ""
     echo "============================================"
@@ -2476,7 +2801,8 @@ PLIST_EOF
 build_native_windows() {
     local target="$1"
     local jobs="$2"
-    local output_dir="$OUTPUT_BASE/windows-native"
+    local output_dir
+    output_dir="$(windows_output_dir)"
     local native_dep_root="$SCRIPT_DIR/.native-windows-deps"
     local protobuf_version="3.12.4"
     local protobuf_archive="$native_dep_root/src/protobuf-cpp-${protobuf_version}.tar.gz"
@@ -2548,8 +2874,8 @@ build_native_windows() {
         exit 1
     fi
 
-    rm -rf "$output_dir"
-    mkdir -p "$output_dir/daemon" "$output_dir/qt"
+    cleanup_legacy_output_root
+    cleanup_target_output_dir "$output_dir"
 
     local configure_extra=""
     case "$target" in
@@ -2571,6 +2897,7 @@ build_native_windows() {
     configure_extra="$configure_extra --with-boost-chrono=boost_chrono-mt"
 
     cd "$SCRIPT_DIR"
+    normalize_windows_source_timestamps
 
     # Patch sources for Qt 5.15+ and Boost 1.73+ compatibility
     if [[ -f src/qt/trafficgraphwidget.cpp ]]; then
@@ -2701,25 +3028,28 @@ QRC_EOF
         [[ -f src/.libs/blakecoin-tx.exe ]] && tx_bin="src/.libs/blakecoin-tx.exe"
 
         strip "$daemon_bin" "$cli_bin" "$tx_bin" 2>/dev/null || true
-        cp "$daemon_bin" "$output_dir/daemon/blakecoind-${VERSION}.exe"
-        cp "$cli_bin" "$output_dir/daemon/blakecoin-cli-${VERSION}.exe"
-        cp "$tx_bin" "$output_dir/daemon/blakecoin-tx-${VERSION}.exe"
+        cp "$daemon_bin" "$output_dir/${DAEMON_NAME}.exe"
+        cp "$cli_bin" "$output_dir/${CLI_NAME}.exe"
+        cp "$tx_bin" "$output_dir/${TX_NAME}.exe"
 
         # Bundle DLLs
         info "Bundling DLL dependencies..."
-        for exe in "$output_dir"/daemon/*.exe; do
+        for exe in \
+            "$output_dir/${DAEMON_NAME}.exe" \
+            "$output_dir/${CLI_NAME}.exe" \
+            "$output_dir/${TX_NAME}.exe"
+        do
             ldd "$exe" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read -r dll; do
                 local dll_lc
                 dll_lc=$(printf '%s' "$dll" | tr '[:upper:]' '[:lower:]')
                 case "$dll_lc" in
                     /c/windows/*) ;;
-                    *) cp -n "$dll" "$output_dir/daemon/" 2>/dev/null || true ;;
+                    *) cp -n "$dll" "$output_dir/" 2>/dev/null || true ;;
                 esac
             done
         done
 
-        write_build_info "$output_dir/daemon" "native-windows" "daemon" "$(detect_os_version windows)"
-        success "Daemon binaries in $output_dir/daemon/"
+        success "Daemon binaries in $output_dir/"
     fi
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
@@ -2727,16 +3057,16 @@ QRC_EOF
         [[ -f src/qt/.libs/blakecoin-qt.exe ]] && qt_bin="src/qt/.libs/blakecoin-qt.exe"
 
         strip "$qt_bin" 2>/dev/null || true
-        cp "$qt_bin" "$output_dir/qt/blakecoin-qt-${VERSION}.exe"
+        cp "$qt_bin" "$output_dir/${QT_NAME}.exe"
 
         # Bundle DLLs
         info "Bundling DLL dependencies..."
-        ldd "$output_dir/qt/blakecoin-qt-${VERSION}.exe" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read -r dll; do
+        ldd "$output_dir/${QT_NAME}.exe" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read -r dll; do
             local dll_lc
             dll_lc=$(printf '%s' "$dll" | tr '[:upper:]' '[:lower:]')
             case "$dll_lc" in
                 /c/windows/*) ;;
-                *) cp -n "$dll" "$output_dir/qt/" 2>/dev/null || true ;;
+                *) cp -n "$dll" "$output_dir/" 2>/dev/null || true ;;
             esac
         done
 
@@ -2759,9 +3089,9 @@ QRC_EOF
             fi
         fi
         if [[ -n "$qt_plugin_dir" && -f "$qt_plugin_dir/platforms/qwindows.dll" ]]; then
-            mkdir -p "$output_dir/qt/platforms"
-            cp "$qt_plugin_dir/platforms/qwindows.dll" "$output_dir/qt/platforms/" 2>/dev/null || true
-            cat > "$output_dir/qt/qt.conf" <<'EOF'
+            mkdir -p "$output_dir/platforms"
+            cp "$qt_plugin_dir/platforms/qwindows.dll" "$output_dir/platforms/" 2>/dev/null || true
+            cat > "$output_dir/qt.conf" <<'EOF'
 [Paths]
 Plugins=.
 EOF
@@ -2769,9 +3099,12 @@ EOF
             warn "qwindows.dll not found; native Windows Qt wallet may fail to launch"
         fi
 
-        write_build_info "$output_dir/qt" "native-windows" "qt" "$(detect_os_version windows)"
-        success "Qt wallet in $output_dir/qt/"
+        success "Qt wallet in $output_dir/"
     fi
+
+    write_build_info "$output_dir" "native-windows" "$target" "$(detect_os_version windows)"
+    CURRENT_OUTPUT_DIR="$output_dir"
+    GENERATE_CONFIG_AFTER_BUILD=1
 
     echo ""
     echo "============================================"
@@ -2857,8 +3190,9 @@ main() {
             ;;
     esac
 
-    # Generate config file if not already present
-    generate_config
+    if [[ "$GENERATE_CONFIG_AFTER_BUILD" == 1 ]]; then
+        generate_config "${CURRENT_OUTPUT_DIR:-$OUTPUT_BASE}"
+    fi
 }
 
 main "$@"
