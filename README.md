@@ -35,7 +35,7 @@ bash ./build.sh --help
 ```
 
 For most users, downloading a prebuilt release from GitHub Releases is the simplest path.
-Use `build.sh` to build the release artifacts locally.
+Use build.sh to build the release artifacts locally.
 
 ---
 
@@ -45,7 +45,7 @@ Use `build.sh` to build the release artifacts locally.
 bash ./build.sh [PLATFORM] [TARGET] [OPTIONS]
 
 Platforms:
-  --native          Build natively on this machine (Linux, macOS, or Windows)
+  --native          Build natively on this machine (Linux or macOS)
   --appimage        Build portable Linux AppImage (requires Docker)
   --windows         Cross-compile for Windows from Linux (requires Docker)
   --macos           Cross-compile for macOS from Linux (requires Docker)
@@ -81,8 +81,8 @@ bash ./build.sh --native --both
 - `--daemon` refreshes the daemon-side Linux files directly in `outputs/`
 - `--qt` refreshes the Qt wallet files directly in `outputs/`
 - Native Ubuntu outputs are bare same-Ubuntu binaries that rely on host-installed native packages
-- `outputs/install-deps.sh` and `outputs/README.md` are generated for the current Ubuntu version
-- Windows can be built either natively on Windows with MSYS2 or cross-compiled from Linux with Docker
+- Native Ubuntu builds bootstrap Berkeley DB `4.8.30.NC` into a local repo cache and always link wallet builds against that copy
+- Each Ubuntu output folder gets its own `install-deps.sh` and `README.md` for the non-BDB host runtime packages
 
 ### Linux (Docker)
 
@@ -112,27 +112,12 @@ bash ./build.sh --appimage --pull-docker
 
 ### Windows
 
-There are two Windows paths in this repo:
-
-#### Windows cross-build from Linux
-
 ```bash
 bash ./build.sh --windows --both --pull-docker
 ```
 
 - Runs on Linux with Docker using `sidgrip/mxe-base:latest`
 - Writes loose cross-built outputs to `outputs/Windows/`
-
-#### Native Windows validation build
-
-```bash
-C:\msys64\usr\bin\bash.exe -lc "cd /c/path/to/Blakecoin && ./build.sh --native --both --jobs 8"
-```
-
-- Requires [MSYS2](https://www.msys2.org) `bash` to exist before the script starts
-- After launch, `build.sh` installs the required MSYS2 / MINGW64 packages automatically
-- Writes validation outputs to `outputs/Windows/`
-- Bundles native Windows `.exe` files, sidecar `.dll` files, `qt.conf`, `platforms/qwindows.dll`, and `build-info.txt` in that Windows output folder
 
 ### macOS
 
@@ -196,9 +181,9 @@ outputs/
     └── build-info.txt
 ```
 
-For Ubuntu native builds, the current host's final wallet files land in `outputs/Ubuntu-20/`, `outputs/Ubuntu-22/`, `outputs/Ubuntu-24/`, or `outputs/Ubuntu-25/` depending on the detected Ubuntu release. These are bare Ubuntu-native binaries, so each Ubuntu folder gets its own `install-deps.sh`, `README.md`, and `blakecoin.conf`.
+For Ubuntu native builds, the current host's final wallet files land in `outputs/Ubuntu-20/`, `outputs/Ubuntu-22/`, `outputs/Ubuntu-24/`, or `outputs/Ubuntu-25/` depending on the detected Ubuntu release. These are bare Ubuntu-native binaries, so each Ubuntu folder gets its own `install-deps.sh`, `README.md`, and `blakecoin.conf`. Berkeley DB `4.8.30.NC` is bootstrapped into a local repo cache by the builder rather than being installed from apt.
 
-For native Windows builds, the current host's local validation bundle lands in `outputs/Windows/`, using `.exe` binaries plus bundled `.dll` files, `qt.conf`, `platforms/qwindows.dll`, and `build-info.txt`.
+For Windows cross-builds from Linux, the output bundle lands in `outputs/Windows/`, using `.exe` binaries plus bundled `.dll` files, `qt.conf`, `platforms/qwindows.dll`, and `build-info.txt`.
 
 For native macOS builds, the current host's daemon tools, `Blakecoin-Qt.app`, and the raw `blakecoin-qt-0.15.2` binary all land in `outputs/Macosx/`.
 

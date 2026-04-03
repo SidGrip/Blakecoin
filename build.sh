@@ -43,6 +43,8 @@ WINDOWS_ICON_SOURCE_TESTNET_PNG="$SCRIPT_DIR/src/qt/res/icons/bitcoin_testnet.pn
 WINDOWS_EXE_ICON_ICO="$SCRIPT_DIR/src/qt/res/icons/Blakecoin_32.ico"
 WINDOWS_EXE_ICON_TESTNET_ICO="$SCRIPT_DIR/src/qt/res/icons/Blakecoin_32_testnet.ico"
 WINDOWS_INSTALLER_ICON_ICO="$SCRIPT_DIR/share/pixmaps/Blakecoin.ico"
+BDB_PACKAGE_MK="$SCRIPT_DIR/depends/packages/bdb.mk"
+BDB_CACHE_ROOT="$SCRIPT_DIR/.cache/bdb"
 NATIVE_LINUX_ALL_DEPS=()
 NATIVE_LINUX_ALL_DEPS_STR=""
 CURRENT_OUTPUT_DIR=""
@@ -183,7 +185,7 @@ usage() {
 Usage: build.sh [PLATFORM] [TARGET] [OPTIONS]
 
 Platforms:
-  --native          Build natively on this machine (Linux, macOS, or Windows)
+  --native          Build natively on this machine (Linux or macOS)
   --appimage        Build portable Linux AppImage (requires Docker)
   --windows         Cross-compile for Windows from Linux (requires Docker)
   --macos           Cross-compile for macOS from Linux (requires Docker)
@@ -366,6 +368,188 @@ cleanup_legacy_output_root() {
     fi
     if [[ ${#stale_ubuntu_archives[@]} -gt 0 ]]; then
         rm -f "${stale_ubuntu_archives[@]}"
+    fi
+}
+
+bdb_recipe_version() {
+    awk -F= '/^\$\(package\)_version=/{print $2}' "$BDB_PACKAGE_MK"
+}
+
+bdb_recipe_sha256() {
+    awk -F= '/^\$\(package\)_sha256_hash=/{print $2}' "$BDB_PACKAGE_MK"
+}
+
+sha256_file() {
+    local file="$1"
+
+    if command -v sha256sum &>/dev/null; then
+        sha256sum "$file" | awk '{print $1}'
+    elif command -v shasum &>/dev/null; then
+        shasum -a 256 "$file" | awk '{print $1}'
+    else
+        error "No SHA256 tool found (need sha256sum or shasum)"
+        exit 1
+    fi
+}
+
+native_bdb48_prefix() {
+    local host_id="$1"
+    printf '%s/4.8/%s\n' "$BDB_CACHE_ROOT" "$host_id"
+}
+
+ensure_repo_bdb48() {
+    local platform="$1"
+    local host_id="$2"
+    local jobs="$3"
+    local prefix=""
+    local prefix_tmp=""
+    local sources_dir=""
+    local build_root=""
+    local version=""
+    local sha256=""
+    local archive_name=""
+    local archive_path=""
+    local dist_name=""
+    local build_dir=""
+    local machine=""
+    local actual_sha=""
+    local configure_cmd=()
+
+    prefix="$(native_bdb48_prefix "$host_id")"
+    prefix_tmp="${prefix}.tmp"
+    sources_dir="$BDB_CACHE_ROOT/sources"
+    build_root="$BDB_CACHE_ROOT/work/$host_id"
+    version="$(bdb_recipe_version)"
+    sha256="$(bdb_recipe_sha256)"
+    archive_name="db-${version}.NC.tar.gz"
+    archive_path="$sources_dir/$archive_name"
+    dist_name="db-${version}.NC"
+    build_dir="$build_root/$dist_name/build_unix"
+
+    if [[ -f "$prefix/include/db_cxx.h" && -f "$prefix/lib/libdb_cxx-4.8.a" && -f "$prefix/lib/libdb-4.8.a" ]]; then
+        echo "$prefix"
+        return 0
+    fi
+
+    mkdir -p "$sources_dir" "$(dirname "$prefix")"
+
+    if [[ ! -f "$archive_path" ]]; then
+        info "Downloading Berkeley DB 4.8.30.NC source..." >&2
+        curl -L "https://download.oracle.com/berkeley-db/$archive_name" -o "${archive_path}.tmp"
+        mv "${archive_path}.tmp" "$archive_path"
+    fi
+
+    actual_sha="$(sha256_file "$archive_path")"
+    if [[ "$actual_sha" != "$sha256" ]]; then
+        error "Berkeley DB source hash mismatch for $archive_name" >&2
+        error "Expected: $sha256" >&2
+        error "Actual:   $actual_sha" >&2
+        exit 1
+    fi
+
+    info "Bootstrapping Berkeley DB 4.8.30.NC for $host_id..." >&2
+    rm -rf "$build_root" "$prefix_tmp"
+    mkdir -p "$build_root"
+    tar -xzf "$archive_path" -C "$build_root"
+
+    pushd "$build_dir" >/dev/null
+
+    sed -i.bak 's/__atomic_compare_exchange/__atomic_compare_exchange_db/g' ../dbinc/atomic.h
+    while IFS= read -r -d '' source_file; do
+        sed -i.bak 's/\batomic_init\b/bdb_atomic_init/g' "$source_file"
+    done < <(find .. \( -name '*.h' -o -name '*.c' -o -name '*.cpp' \) -print0)
+    find .. -name '*.bak' -delete 2>/dev/null || true
+    cp -f "$SCRIPT_DIR/depends/config.guess" "$SCRIPT_DIR/depends/config.sub" ../dist/
+
+    configure_cmd=(
+        ../dist/configure
+        --prefix="$prefix_tmp"
+        --enable-cxx
+        --disable-shared
+        --disable-replication
+        --disable-atomicsupport
+    )
+
+    case "$platform" in
+        linux)
+            configure_cmd+=(--with-pic --with-mutex=POSIX/pthreads)
+            ;;
+        mingw)
+            machine="$(gcc -dumpmachine 2>/dev/null || true)"
+            [[ -n "$machine" ]] && configure_cmd+=(--host="$machine")
+            configure_cmd+=(--enable-mingw)
+            ;;
+        *)
+            error "Unsupported Berkeley DB bootstrap platform: $platform" >&2
+            exit 1
+            ;;
+    esac
+
+    env CFLAGS="-O2" CXXFLAGS="-O2 -std=c++11" "${configure_cmd[@]}" >&2
+    make -j"$jobs" libdb_cxx-4.8.a libdb-4.8.a >&2
+
+    mkdir -p "$prefix_tmp/lib" "$prefix_tmp/include"
+
+    if [[ ! -f db.h || ! -f db_cxx.h ]]; then
+        error "Failed to locate Berkeley DB headers in $build_dir" >&2
+        exit 1
+    fi
+
+    cp -f db.h "$prefix_tmp/include/db.h"
+    cp -f db_cxx.h "$prefix_tmp/include/db_cxx.h"
+    cp -f libdb-4.8.a "$prefix_tmp/lib/libdb-4.8.a"
+    cp -f libdb_cxx-4.8.a "$prefix_tmp/lib/libdb_cxx-4.8.a"
+
+    if [[ -f libdb.a ]]; then
+        cp -f libdb.a "$prefix_tmp/lib/libdb.a"
+    else
+        cp -f libdb-4.8.a "$prefix_tmp/lib/libdb.a"
+    fi
+
+    if [[ -f libdb_cxx.a ]]; then
+        cp -f libdb_cxx.a "$prefix_tmp/lib/libdb_cxx.a"
+    else
+        cp -f libdb_cxx-4.8.a "$prefix_tmp/lib/libdb_cxx.a"
+    fi
+
+    popd >/dev/null
+
+    rm -rf "$prefix"
+    mv "$prefix_tmp" "$prefix"
+    rm -rf "$build_root"
+
+    echo "$prefix"
+}
+
+native_linux_link_command() {
+    local target="$1"
+    local cmd=""
+
+    pushd "$SCRIPT_DIR/src" >/dev/null
+    cmd="$(make -n V=1 "$target" 2>/dev/null | awk '/\/libtool[[:space:]].*--mode=link/ { line=$0 } END { if (line != "") print line; else exit 1 }')"
+    popd >/dev/null
+
+    [[ -n "$cmd" ]] || return 1
+    printf '%s\n' "$cmd"
+}
+
+relink_native_linux_target() {
+    local target="$1"
+    local artifact="$2"
+    local cmd=""
+
+    cmd="$(native_linux_link_command "$target")" || {
+        error "Failed to capture native Linux link command for $target"
+        return 1
+    }
+
+    pushd "$SCRIPT_DIR/src" >/dev/null
+    bash -lc "$cmd" >/dev/null
+    popd >/dev/null
+
+    if objdump -p "$artifact" 2>/dev/null | grep -Eq 'libdb(_cxx)?-5\.3\.so'; then
+        error "Native Linux post-link verification failed for $artifact"
+        return 1
     fi
 }
 
@@ -623,10 +807,6 @@ EOF
 
 resolve_native_linux_packages() {
     local target="$1"
-    local bdb48_candidate=""
-    local bdb53pp_candidate=""
-    local bdb_generic_candidate=""
-    local bdb_deps=()
     local qt_deps=()
 
     NATIVE_LINUX_ALL_DEPS=(
@@ -643,24 +823,6 @@ resolve_native_linux_packages() {
         protobuf-compiler
         libboost-all-dev
     )
-
-    bdb48_candidate=$(apt-cache policy libdb4.8++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
-    bdb53pp_candidate=$(apt-cache policy libdb5.3++-dev 2>/dev/null | awk '/Candidate:/ {print $2}')
-    bdb_generic_candidate=$(apt-cache policy "libdb++-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')
-    if [[ -n "$bdb48_candidate" && "$bdb48_candidate" != "(none)" ]]; then
-        bdb_deps=(libdb4.8-dev libdb4.8++-dev)
-        info "BDB 4.8 available — wallets will be portable"
-    elif [[ -n "$bdb53pp_candidate" && "$bdb53pp_candidate" != "(none)" ]]; then
-        bdb_deps=(libdb5.3-dev libdb5.3++-dev)
-        info "BDB 4.8 not available — using libdb5.3++-dev (--with-incompatible-bdb will be applied)"
-    elif [[ -n "$bdb_generic_candidate" && "$bdb_generic_candidate" != "(none)" ]]; then
-        bdb_deps=(libdb++-dev)
-        info "BDB 4.8 not available — using generic libdb++-dev (--with-incompatible-bdb will be applied)"
-    else
-        bdb_deps=(libdb-dev)
-        warn "No Berkeley DB C++ dev package candidate detected; configure may fail unless db_cxx headers are already present"
-    fi
-    NATIVE_LINUX_ALL_DEPS+=("${bdb_deps[@]}")
 
     if [[ "$target" == "qt" || "$target" == "both" ]]; then
         qt_deps=(qtbase5-dev qttools5-dev qttools5-dev-tools libqrencode-dev)
@@ -708,11 +870,13 @@ write_linux_release_readme() {
 
 These are bare Ubuntu-native daemon binaries. Install the native Ubuntu packages first if this host does not already have them.
 
-### Install native Ubuntu dependencies:
+### Install native Ubuntu runtime dependencies:
 \`\`\`bash
 chmod +x install-deps.sh
 ./install-deps.sh
 \`\`\`
+
+Berkeley DB 4.8 is already handled by the build and is not installed from apt.
 
 Equivalent apt command:
 \`\`\`bash
@@ -760,11 +924,13 @@ EOF
 This is a bare Ubuntu-native Qt wallet binary. Install the native Ubuntu packages first if this host does not already have them.
 ${qt_launcher_note}
 
-### Install native Ubuntu dependencies:
+### Install native Ubuntu runtime dependencies:
 \`\`\`bash
 chmod +x install-deps.sh
 ./install-deps.sh
 \`\`\`
+
+Berkeley DB 4.8 is already handled by the build and is not installed from apt.
 
 Equivalent apt command:
 \`\`\`bash
@@ -817,11 +983,13 @@ EOF
 These are bare Ubuntu-native binaries. Install the native Ubuntu packages first if this host does not already have them.
 ${qt_launcher_note}
 
-### Install native Ubuntu dependencies:
+### Install native Ubuntu runtime dependencies:
 \`\`\`bash
 chmod +x install-deps.sh
 ./install-deps.sh
 \`\`\`
+
+Berkeley DB 4.8 is already handled by the build and is not installed from apt.
 
 Equivalent apt command:
 \`\`\`bash
@@ -2406,7 +2574,13 @@ build_native_direct() {
     case "$os" in
         linux)   build_native_linux_direct "$target" "$jobs" ;;
         macos)   build_native_macos "$target" "$jobs" ;;
-        windows) build_native_windows "$target" "$jobs" ;;
+        windows)
+            error "Native Windows builds are currently disabled in this repo."
+            echo ""
+            echo "Use the supported Windows cross-build path from Linux instead:"
+            echo "  ./build.sh --windows --both --pull-docker"
+            exit 1
+            ;;
     esac
 }
 
@@ -2449,6 +2623,8 @@ build_native_linux_direct() {
 
     cleanup_legacy_output_root
     rm -rf "$OUTPUT_BASE/native"
+    local linux_bdb_prefix=""
+    linux_bdb_prefix="$(ensure_repo_bdb48 linux "linux-$(uname -m)" "$jobs")" || return 1
 
     local configure_extra=""
     case "$target" in
@@ -2456,12 +2632,6 @@ build_native_linux_direct() {
         qt)     configure_extra="--with-gui=qt5" ;;
         both)   configure_extra="--with-gui=qt5" ;;
     esac
-
-    # BDB 4.8 is preferred for portable wallets; use --with-incompatible-bdb for 5.3+
-    if ! test -f /usr/include/db4.8/db_cxx.h && ! test -f /usr/lib/libdb_cxx-4.8.so; then
-        info "BDB 4.8 not found, using system BDB with --with-incompatible-bdb"
-        configure_extra="$configure_extra --with-incompatible-bdb"
-    fi
 
     cd "$SCRIPT_DIR"
 
@@ -2491,6 +2661,8 @@ build_native_linux_direct() {
 
     info "Configuring..."
     ./configure --disable-tests --disable-bench $configure_extra \
+        BDB_CFLAGS="-I$linux_bdb_prefix/include" \
+        BDB_LIBS="-L$linux_bdb_prefix/lib -ldb_cxx-4.8 -ldb-4.8" \
         CXXFLAGS="-O2 -DBOOST_BIND_GLOBAL_PLACEHOLDERS"
 
     # Fix missing Qt translation files (Blakecoin fork does not include them)
@@ -2509,6 +2681,18 @@ QRC_EOF
 
     info "Building with $jobs jobs..."
     make -j"$jobs"
+
+    if [[ "$target" == "daemon" || "$target" == "both" ]]; then
+        info "Relinking native Linux daemon tools against Berkeley DB 4.8..."
+        relink_native_linux_target "blakecoind" "$SCRIPT_DIR/src/blakecoind"
+        relink_native_linux_target "blakecoin-cli" "$SCRIPT_DIR/src/blakecoin-cli"
+        relink_native_linux_target "blakecoin-tx" "$SCRIPT_DIR/src/blakecoin-tx"
+    fi
+
+    if [[ "$target" == "qt" || "$target" == "both" ]]; then
+        info "Relinking native Linux Qt wallet against Berkeley DB 4.8..."
+        relink_native_linux_target "qt/blakecoin-qt" "$SCRIPT_DIR/src/qt/blakecoin-qt"
+    fi
 
     if [[ "$target" == "daemon" || "$target" == "both" ]]; then
         strip src/blakecoind src/blakecoin-cli src/blakecoin-tx 2>/dev/null || true
@@ -2829,7 +3013,6 @@ build_native_windows() {
         mingw-w64-x86_64-openssl
         mingw-w64-x86_64-libevent
         mingw-w64-x86_64-miniupnpc
-        mingw-w64-x86_64-db
     )
 
     echo ""
@@ -2876,6 +3059,8 @@ build_native_windows() {
 
     cleanup_legacy_output_root
     cleanup_target_output_dir "$output_dir"
+    local windows_bdb_prefix=""
+    windows_bdb_prefix="$(ensure_repo_bdb48 mingw "mingw64-$(gcc -dumpmachine | tr '/' '_')" "$jobs")" || return 1
 
     local configure_extra=""
     case "$target" in
@@ -2883,10 +3068,6 @@ build_native_windows() {
         qt)     configure_extra="--with-gui=qt5" ;;
         both)   configure_extra="--with-gui=qt5" ;;
     esac
-
-    # MSYS2 ships newer Berkeley DB than 4.8, so native builds need the
-    # compatibility flag. Cross-build release artifacts still use 4.8.
-    configure_extra="$configure_extra --with-incompatible-bdb"
 
     # Modern MSYS2 uses Boost 1.90 with -mt library names for the compiled
     # components that Blakecoin links against.
@@ -2989,6 +3170,9 @@ PY
 
     info "Configuring..."
     ./configure --disable-tests --disable-bench $configure_extra \
+        BDB_CFLAGS="-I$windows_bdb_prefix/include" \
+        BDB_LIBS="-L$windows_bdb_prefix/lib -ldb_cxx-4.8 -ldb-4.8" \
+        CFLAGS="-O2" \
         CXXFLAGS="-O2 -DBOOST_BIND_GLOBAL_PLACEHOLDERS"
 
     # Blakecoin 0.15.2 does not ship the upstream translation payloads.
