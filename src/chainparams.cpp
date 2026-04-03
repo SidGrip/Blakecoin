@@ -145,9 +145,11 @@ public:
         // Merkle root is COMPUTED and must match (validates our transaction/merkle implementation)
         assert(genesis.hashMerkleRoot == uint256S("0x9e4654d5bb91c723c3dbbaee57761d06ed10ac17f4d8841746aeec7ff8206ddc"));
 
-        // Blakecoin DNS seeds
-        vSeeds.emplace_back("blakecoin.org", "seed.blakecoin.org", true);
-        vSeeds.emplace_back("blakecoin.org", "seed2.blakecoin.org", true);
+        // Blakecoin DNS seeds — resolve to 0.15.2 node IPs on port 8773
+        // supportsServiceBitsFiltering = false: these are plain A records, not
+        // Bitcoin-style DNS seeders that support x<servicebits>. prefix filtering
+        vSeeds.emplace_back("blakestream.io", "seed.blakestream.io", false);
+        vSeeds.emplace_back("blakecoin.org", "seed.blakecoin.org", false);
 
         // BEGIN BLAKECOIN: Blakecoin address prefixes from v0.8.6
         // PUBKEY_ADDRESS = 26 (addresses starting with 'B')
