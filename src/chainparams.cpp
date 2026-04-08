@@ -171,22 +171,23 @@ public:
 
         checkpointData = (CCheckpointData) {
             {
-                {0, uint256S("0x000000ba5cae4648b1a2b823f84cc3424e5d96d7234b39c6bb42800b2c7639be")},
-                {210000, uint256S("0x000000000000048b95347e83192f69cf0366076336c639f9b7228e9ba171342e")},
-                {216116, uint256S("0x00000000000001b4f4b433e81ee46494af945cf96014816a4e2370f11b23df4e")},
-                {225430, uint256S("0x00000000000001c108384350f74090433e7fcf79a606b8e797f065b130575932")},
-                {250000, uint256S("0x000000000000003887df1f29024b06fc2200b55f8af8f35453d7be294df2d214")},
-                {279000, uint256S("0x0000000000000001ae8c72a0b0c301f67e3afca10e819efa9041e458e9bd7e40")},
-                {295000, uint256S("0x00000000000000004d9b4ef50f0f9d686fd69db2e03af35a100370c64632a983")},
+                {0,       uint256S("0x000000ba5cae4648b1a2b823f84cc3424e5d96d7234b39c6bb42800b2c7639be")},
+                {2499,    uint256S("0x00000000040fcdd50c1bd5ad140039b6d8f4e7f3ad497115314c0b2c0569b285")},
+                {19797,   uint256S("0x000000000093b59ec621c8d8bcee44a7644e40d236e5cd126619e292e8b22a78")},
+                {39253,   uint256S("0x00000000000fe223ac905ab8902695a52e6c1829809a5cbbf4fdbbad5d11758c")},
+                {143000,  uint256S("0x000000000000178e824cad2eb1e0bd499539750c3b71b3f1c4015f1962de1062")},
+                {217000,  uint256S("0x000000000001d0c2645df7f149081f03e9f5612c6b44b2116b1b84c4781989e2")},
+                {297313,  uint256S("0x00000000000264e992d35a4775d3b4e16e807221401ebbee87ab8cd6505335b1")},
+                {350620,  uint256S("0x00000000000132bbab473392bec2230eccc1dcc27af3c4b088c15067734e610a")},
+                {1322950, uint256S("0x0000000000003205ddd0fb453c229a5e976cccd1516a64b5893d9d41cb11b2ff")},
             }
         };
 
         chainTxData = ChainTxData{
-            // Data as of block genesis.
-            1372066561, // * UNIX timestamp of last known number of transactions
-            1,          // * total number of transactions between genesis and that timestamp
-                        //   (the tx=... number in the SetBestChain debug.log lines)
-            0.01        // * estimated number of transactions per second after that timestamp
+            // Data as of block 1322950 (last checkpoint, March 2022)
+            1646526399, // * UNIX timestamp of last checkpoint block
+            2106015,    // * total number of transactions between genesis and last checkpoint
+            2000.0 / (24 * 60 * 60) // * ~2000 tx/day expressed as tx/sec
         };
     }
 };
