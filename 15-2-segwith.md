@@ -44,7 +44,7 @@ Out of scope unless promoted later:
 
 - Base source: `Blakecoin-0.15.2`
 - Donor reference: `Blakecoin-0.15.2-segwit`
-- Clean update target: `Blakecoin-0.15.2-update`
+- Clean update target: `Blakecoin-0.15.21`
 
 Historical note:
 
@@ -160,7 +160,7 @@ Build tooling note:
 
 Build server validation note:
 
-- On build server `192.168.1.221`, Docker builds for native Linux, Windows, and AppImage completed successfully from `Blakecoin-0.15.2-update`.
+- On build server `192.168.1.221`, Docker builds for native Linux, Windows, and AppImage completed successfully from `Blakecoin-0.15.21`.
 - The default macOS depends path failed while building the old Boost `1_64_0` package because the Darwin build ended up invoking plain `g++` with Darwin-only flags such as `-fcoalesce-templates`.
 - The legacy macOS osxcross path succeeded on the same server using `MACOS_CROSS_STRATEGY=legacy`.
 - Bitcoin Core's current `depends` tree should be treated as the reference for the future macOS cleanup, especially its builder/host split and Darwin clang toolchain handling, but it cannot be dropped into this `0.15.2` tree unchanged because this fork still carries the older Boost/B2-era depends recipes.

@@ -38,21 +38,21 @@ p2p_segwit = load_p2p_segwit_module()
 
 
 EXPECTED_COIN_LABELS = {
-    "Blakecoin-0.15.2-update": "Blakecoin",
-    "BlakeBitcoin-0.15.2-update": "BlakeBitcoin",
-    "Electron-ELT-0.15.2-update": "Electron-ELT",
-    "lithium-0.15.2-update": "lithium",
-    "Photon-0.15.2-update": "Photon",
-    "universalmol-0.15.2-update": "UniversalMolecule",
+    "Blakecoin-0.15.21": "Blakecoin",
+    "BlakeBitcoin-0.15.21": "BlakeBitcoin",
+    "Electron-ELT-0.15.21": "Electron-ELT",
+    "lithium-0.15.21": "lithium",
+    "Photon-0.15.21": "Photon",
+    "universalmol-0.15.21": "UniversalMolecule",
 }
 
 EXPECTED_REGTEST_BECH32_PREFIXES = {
-    "Blakecoin-0.15.2-update": "rblc1",
-    "BlakeBitcoin-0.15.2-update": "rblb1",
-    "Electron-ELT-0.15.2-update": "relt1",
-    "lithium-0.15.2-update": "rlit1",
-    "Photon-0.15.2-update": "rpho1",
-    "universalmol-0.15.2-update": "rumo1",
+    "Blakecoin-0.15.21": "rblc1",
+    "BlakeBitcoin-0.15.21": "rblb1",
+    "Electron-ELT-0.15.21": "relt1",
+    "lithium-0.15.21": "rlit1",
+    "Photon-0.15.21": "rpho1",
+    "universalmol-0.15.21": "rumo1",
 }
 
 VB_OVERRIDE = "segwit:0:999999999999"
