@@ -258,13 +258,23 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         {
             std::string strAddress;
             ssKey >> strAddress;
-            ssValue >> pwallet->mapAddressBook[CBitcoinAddress(strAddress).Get()].name;
+            CTxDestination dest = DecodeDestination(strAddress);
+            if (!IsValidDestination(dest)) {
+                strErr = "Error reading wallet database: invalid address book name key";
+                return false;
+            }
+            ssValue >> pwallet->mapAddressBook[dest].name;
         }
         else if (strType == "purpose")
         {
             std::string strAddress;
             ssKey >> strAddress;
-            ssValue >> pwallet->mapAddressBook[CBitcoinAddress(strAddress).Get()].purpose;
+            CTxDestination dest = DecodeDestination(strAddress);
+            if (!IsValidDestination(dest)) {
+                strErr = "Error reading wallet database: invalid address book purpose key";
+                return false;
+            }
+            ssValue >> pwallet->mapAddressBook[dest].purpose;
         }
         else if (strType == "tx")
         {
@@ -491,7 +501,8 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             ssKey >> strAddress;
             ssKey >> strKey;
             ssValue >> strValue;
-            if (!pwallet->LoadDestData(CBitcoinAddress(strAddress).Get(), strKey, strValue))
+            CTxDestination dest = DecodeDestination(strAddress);
+            if (!IsValidDestination(dest) || !pwallet->LoadDestData(dest, strKey, strValue))
             {
                 strErr = "Error reading wallet database: LoadDestData failed";
                 return false;

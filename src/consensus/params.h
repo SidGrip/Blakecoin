@@ -7,6 +7,7 @@
 #define BITCOIN_CONSENSUS_PARAMS_H
 
 #include "uint256.h"
+#include <limits>
 #include <map>
 #include <string>
 
@@ -25,6 +26,8 @@ enum DeploymentPos
  * Struct for each individual consensus rule change using BIP9.
  */
 struct BIP9Deployment {
+    static constexpr int64_t ALWAYS_ACTIVE = -1;
+    static constexpr int64_t NO_TIMEOUT = std::numeric_limits<int64_t>::max();
     /** Bit position to select the particular bit in nVersion. */
     int bit;
     /** Start MedianTime for version bits miner confirmation. Can be a date in the past */

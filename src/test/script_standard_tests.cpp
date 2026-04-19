@@ -225,13 +225,19 @@ BOOST_AUTO_TEST_CASE(script_standard_ExtractDestination)
 
     // TX_WITNESS_V0_KEYHASH
     s.clear();
-    s << OP_0 << ToByteVector(pubkey);
-    BOOST_CHECK(!ExtractDestination(s, address));
+    s << OP_0 << ToByteVector(pubkey.GetID());
+    BOOST_CHECK(ExtractDestination(s, address));
+    BOOST_CHECK(boost::get<WitnessV0KeyHash>(&address) &&
+                *boost::get<WitnessV0KeyHash>(&address) == WitnessV0KeyHash(pubkey.GetID()));
 
     // TX_WITNESS_V0_SCRIPTHASH
+    uint256 witnessScriptHash;
+    CSHA256().Write(&redeemScript[0], redeemScript.size()).Finalize(witnessScriptHash.begin());
     s.clear();
-    s << OP_0 << ToByteVector(CScriptID(redeemScript));
-    BOOST_CHECK(!ExtractDestination(s, address));
+    s << OP_0 << ToByteVector(witnessScriptHash);
+    BOOST_CHECK(ExtractDestination(s, address));
+    BOOST_CHECK(boost::get<WitnessV0ScriptHash>(&address) &&
+                *boost::get<WitnessV0ScriptHash>(&address) == WitnessV0ScriptHash(witnessScriptHash));
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_ExtractDestinations)
@@ -302,12 +308,24 @@ BOOST_AUTO_TEST_CASE(script_standard_ExtractDestinations)
     // TX_WITNESS_V0_KEYHASH
     s.clear();
     s << OP_0 << ToByteVector(pubkeys[0].GetID());
-    BOOST_CHECK(!ExtractDestinations(s, whichType, addresses, nRequired));
+    BOOST_CHECK(ExtractDestinations(s, whichType, addresses, nRequired));
+    BOOST_CHECK_EQUAL(whichType, TX_WITNESS_V0_KEYHASH);
+    BOOST_CHECK_EQUAL(addresses.size(), 1);
+    BOOST_CHECK_EQUAL(nRequired, 1);
+    BOOST_CHECK(boost::get<WitnessV0KeyHash>(&addresses[0]) &&
+                *boost::get<WitnessV0KeyHash>(&addresses[0]) == WitnessV0KeyHash(pubkeys[0].GetID()));
 
     // TX_WITNESS_V0_SCRIPTHASH
+    uint256 witnessScriptHash;
+    CSHA256().Write(&redeemScript[0], redeemScript.size()).Finalize(witnessScriptHash.begin());
     s.clear();
-    s << OP_0 << ToByteVector(CScriptID(redeemScript));
-    BOOST_CHECK(!ExtractDestinations(s, whichType, addresses, nRequired));
+    s << OP_0 << ToByteVector(witnessScriptHash);
+    BOOST_CHECK(ExtractDestinations(s, whichType, addresses, nRequired));
+    BOOST_CHECK_EQUAL(whichType, TX_WITNESS_V0_SCRIPTHASH);
+    BOOST_CHECK_EQUAL(addresses.size(), 1);
+    BOOST_CHECK_EQUAL(nRequired, 1);
+    BOOST_CHECK(boost::get<WitnessV0ScriptHash>(&addresses[0]) &&
+                *boost::get<WitnessV0ScriptHash>(&addresses[0]) == WitnessV0ScriptHash(witnessScriptHash));
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_GetScriptFor_)

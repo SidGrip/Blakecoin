@@ -87,6 +87,14 @@ public:
     {
         return (exp_addrType == "script");
     }
+    bool operator()(const WitnessV0KeyHash &id) const
+    {
+        return (exp_addrType == "witness_keyhash");
+    }
+    bool operator()(const WitnessV0ScriptHash &id) const
+    {
+        return (exp_addrType == "witness_scripthash");
+    }
     bool operator()(const CNoDestination &no) const
     {
         return (exp_addrType == "none");
@@ -108,6 +116,16 @@ public:
     bool operator()(const CScriptID &id) const
     {
         uint160 exp_key(exp_payload);
+        return exp_key == id;
+    }
+    bool operator()(const WitnessV0KeyHash &id) const
+    {
+        uint160 exp_key(exp_payload);
+        return exp_key == id;
+    }
+    bool operator()(const WitnessV0ScriptHash &id) const
+    {
+        uint256 exp_key(exp_payload);
         return exp_key == id;
     }
     bool operator()(const CNoDestination &no) const
@@ -265,6 +283,32 @@ BOOST_AUTO_TEST_CASE(base58_keys_invalid)
     }
 }
 
+BOOST_AUTO_TEST_CASE(destination_roundtrip)
+{
+    SelectParams(CBaseChainParams::MAIN);
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    CTxDestination legacy_dest = key.GetPubKey().GetID();
+    std::string legacy_addr = EncodeDestination(legacy_dest);
+    BOOST_CHECK(IsValidDestinationString(legacy_addr));
+    BOOST_CHECK(DecodeDestination(legacy_addr) == legacy_dest);
+
+    CTxDestination witness_key_dest = WitnessV0KeyHash(key.GetPubKey().GetID());
+    std::string bech32_addr = EncodeDestination(witness_key_dest);
+    BOOST_CHECK(bech32_addr.find(Params().Bech32HRP() + "1") == 0);
+    BOOST_CHECK(IsValidDestinationString(bech32_addr));
+    BOOST_CHECK(DecodeDestination(bech32_addr) == witness_key_dest);
+
+    CScript raw_pubkey_script = GetScriptForRawPubKey(key.GetPubKey());
+    CScript witness_script = GetScriptForWitness(raw_pubkey_script);
+    CTxDestination witness_script_dest;
+    BOOST_CHECK(ExtractDestination(witness_script, witness_script_dest));
+    std::string witness_script_addr = EncodeDestination(witness_script_dest);
+    BOOST_CHECK(IsValidDestinationString(witness_script_addr));
+    BOOST_CHECK(DecodeDestination(witness_script_addr) == witness_script_dest);
+}
+
 
 BOOST_AUTO_TEST_SUITE_END()
-

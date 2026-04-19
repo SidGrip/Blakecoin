@@ -153,11 +153,29 @@ public:
             obj.push_back(Pair("hex", HexStr(subscript.begin(), subscript.end())));
             UniValue a(UniValue::VARR);
             for (const CTxDestination& addr : addresses)
-                a.push_back(CBitcoinAddress(addr).ToString());
+                a.push_back(EncodeDestination(addr));
             obj.push_back(Pair("addresses", a));
             if (whichType == TX_MULTISIG)
                 obj.push_back(Pair("sigsrequired", nRequired));
         }
+        return obj;
+    }
+
+    UniValue operator()(const WitnessV0KeyHash &keyID) const {
+        UniValue obj(UniValue::VOBJ);
+        obj.push_back(Pair("isscript", false));
+        obj.push_back(Pair("iswitness", true));
+        obj.push_back(Pair("witness_version", 0));
+        obj.push_back(Pair("witness_program", HexStr(keyID.begin(), keyID.end())));
+        return obj;
+    }
+
+    UniValue operator()(const WitnessV0ScriptHash &scriptID) const {
+        UniValue obj(UniValue::VOBJ);
+        obj.push_back(Pair("isscript", true));
+        obj.push_back(Pair("iswitness", true));
+        obj.push_back(Pair("witness_version", 0));
+        obj.push_back(Pair("witness_program", HexStr(scriptID.begin(), scriptID.end())));
         return obj;
     }
 };
@@ -207,15 +225,14 @@ UniValue validateaddress(const JSONRPCRequest& request)
     LOCK(cs_main);
 #endif
 
-    CBitcoinAddress address(request.params[0].get_str());
-    bool isValid = address.IsValid();
+    CTxDestination dest = DecodeDestination(request.params[0].get_str());
+    bool isValid = IsValidDestination(dest);
 
     UniValue ret(UniValue::VOBJ);
     ret.push_back(Pair("isvalid", isValid));
     if (isValid)
     {
-        CTxDestination dest = address.Get();
-        std::string currentAddress = address.ToString();
+        std::string currentAddress = EncodeDestination(dest);
         ret.push_back(Pair("address", currentAddress));
 
         CScript scriptPubKey = GetScriptForDestination(dest);
@@ -230,10 +247,10 @@ UniValue validateaddress(const JSONRPCRequest& request)
         if (pwallet && pwallet->mapAddressBook.count(dest)) {
             ret.push_back(Pair("account", pwallet->mapAddressBook[dest].name));
         }
-        CKeyID keyID;
         if (pwallet) {
             const auto& meta = pwallet->mapKeyMetadata;
-            auto it = address.GetKeyID(keyID) ? meta.find(keyID) : meta.end();
+            CKeyID keyID = GetKeyForDestination(*pwallet, dest);
+            auto it = !keyID.IsNull() ? meta.find(keyID) : meta.end();
             if (it == meta.end()) {
                 it = meta.find(CScriptID(scriptPubKey));
             }
@@ -277,10 +294,10 @@ CScript _createmultisig_redeemScript(CWallet * const pwallet, const UniValue& pa
         const std::string& ks = keys[i].get_str();
 #ifdef ENABLE_WALLET
         // Case 1: Bitcoin address and we have full public key:
-        CBitcoinAddress address(ks);
-        if (pwallet && address.IsValid()) {
-            CKeyID keyID;
-            if (!address.GetKeyID(keyID))
+        CTxDestination address = DecodeDestination(ks);
+        if (pwallet && IsValidDestination(address)) {
+            CKeyID keyID = GetKeyForDestination(*pwallet, address);
+            if (keyID.IsNull())
                 throw std::runtime_error(
                     strprintf("%s does not refer to a key",ks));
             CPubKey vchPubKey;
@@ -357,10 +374,8 @@ UniValue createmultisig(const JSONRPCRequest& request)
     // Construct using pay-to-script-hash:
     CScript inner = _createmultisig_redeemScript(pwallet, request.params);
     CScriptID innerID(inner);
-    CBitcoinAddress address(innerID);
-
     UniValue result(UniValue::VOBJ);
-    result.push_back(Pair("address", address.ToString()));
+    result.push_back(Pair("address", EncodeDestination(innerID)));
     result.push_back(Pair("redeemScript", HexStr(inner.begin(), inner.end())));
 
     return result;

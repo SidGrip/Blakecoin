@@ -202,6 +202,16 @@ bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet)
         addressRet = CScriptID(uint160(vSolutions[0]));
         return true;
     }
+    else if (whichType == TX_WITNESS_V0_KEYHASH)
+    {
+        addressRet = WitnessV0KeyHash(vSolutions[0]);
+        return true;
+    }
+    else if (whichType == TX_WITNESS_V0_SCRIPTHASH)
+    {
+        addressRet = WitnessV0ScriptHash(vSolutions[0]);
+        return true;
+    }
     // Multisig txns have more than one address...
     return false;
 }
@@ -271,6 +281,18 @@ public:
         *script << OP_HASH160 << ToByteVector(scriptID) << OP_EQUAL;
         return true;
     }
+
+    bool operator()(const WitnessV0KeyHash& id) const {
+        script->clear();
+        *script << OP_0 << ToByteVector(id);
+        return true;
+    }
+
+    bool operator()(const WitnessV0ScriptHash& id) const {
+        script->clear();
+        *script << OP_0 << ToByteVector(id);
+        return true;
+    }
 };
 } // namespace
 
@@ -300,23 +322,21 @@ CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys)
 
 CScript GetScriptForWitness(const CScript& redeemscript)
 {
-    CScript ret;
-
     txnouttype typ;
     std::vector<std::vector<unsigned char> > vSolutions;
     if (Solver(redeemscript, typ, vSolutions)) {
         if (typ == TX_PUBKEY) {
-            unsigned char h160[20];
-            CHash160().Write(&vSolutions[0][0], vSolutions[0].size()).Finalize(h160);
-            ret << OP_0 << std::vector<unsigned char>(&h160[0], &h160[20]);
-            return ret;
+            return GetScriptForDestination(WitnessV0KeyHash(Hash160(vSolutions[0].begin(), vSolutions[0].end())));
         } else if (typ == TX_PUBKEYHASH) {
-           ret << OP_0 << vSolutions[0];
-           return ret;
+            return GetScriptForDestination(WitnessV0KeyHash(vSolutions[0]));
         }
     }
     uint256 hash;
     CSHA256().Write(&redeemscript[0], redeemscript.size()).Finalize(hash.begin());
-    ret << OP_0 << ToByteVector(hash);
-    return ret;
+    return GetScriptForDestination(WitnessV0ScriptHash(hash));
+}
+
+bool IsValidDestination(const CTxDestination& dest)
+{
+    return dest.which() != 0;
 }

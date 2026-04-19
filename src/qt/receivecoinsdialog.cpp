@@ -14,6 +14,7 @@
 #include "receiverequestdialog.h"
 #include "recentrequeststablemodel.h"
 #include "walletmodel.h"
+#include "wallet/wallet.h"
 
 #include <QAction>
 #include <QCursor>
@@ -21,6 +22,34 @@
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QTextDocument>
+
+namespace {
+int AddressTypeIndex(OutputType type)
+{
+    switch (type) {
+    case OUTPUT_TYPE_P2SH_SEGWIT:
+        return 1;
+    case OUTPUT_TYPE_BECH32:
+        return 2;
+    case OUTPUT_TYPE_LEGACY:
+    default:
+        return 0;
+    }
+}
+
+OutputType AddressTypeForIndex(int index)
+{
+    switch (index) {
+    case 1:
+        return OUTPUT_TYPE_P2SH_SEGWIT;
+    case 2:
+        return OUTPUT_TYPE_BECH32;
+    case 0:
+    default:
+        return OUTPUT_TYPE_LEGACY;
+    }
+}
+} // namespace
 
 ReceiveCoinsDialog::ReceiveCoinsDialog(const PlatformStyle *_platformStyle, QWidget *parent) :
     QDialog(parent),
@@ -93,6 +122,8 @@ void ReceiveCoinsDialog::setModel(WalletModel *_model)
             SLOT(recentRequestsView_selectionChanged(QItemSelection, QItemSelection)));
         // Last 2 columns are set by the columnResizingFixer, when the table geometry is ready.
         columnResizingFixer = new GUIUtil::TableViewLastColumnResizingFixer(tableView, AMOUNT_MINIMUM_COLUMN_WIDTH, DATE_COLUMN_WIDTH, this);
+
+        ui->addressType->setCurrentIndex(AddressTypeIndex(model->getDefaultAddressType()));
     }
 }
 
@@ -107,6 +138,9 @@ void ReceiveCoinsDialog::clear()
     ui->reqLabel->setText("");
     ui->reqMessage->setText("");
     ui->reuseAddress->setChecked(false);
+    if (model) {
+        ui->addressType->setCurrentIndex(AddressTypeIndex(model->getDefaultAddressType()));
+    }
     updateDisplayUnit();
 }
 
@@ -152,7 +186,8 @@ void ReceiveCoinsDialog::on_receiveButton_clicked()
         }
     } else {
         /* Generate new receiving address */
-        address = model->getAddressTableModel()->addRow(AddressTableModel::Receive, label, "");
+        OutputType addressType = AddressTypeForIndex(ui->addressType->currentIndex());
+        address = model->getAddressTableModel()->addRow(AddressTableModel::Receive, label, "", addressType);
     }
     SendCoinsRecipient info(address, label,
         ui->reqAmount->value(), ui->reqMessage->text());

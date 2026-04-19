@@ -151,6 +151,7 @@ EXTENDED_SCRIPTS = [
     'forknotify.py',
     'invalidateblock.py',
     'replace-by-fee.py',
+    'wallet-basic-smoke.py',
 ]
 
 # Place EXTENDED_SCRIPTS first since it has the 3 longest running tests
@@ -280,8 +281,12 @@ def run_tests(test_list, src_dir, build_dir, exeext, tmpdir, jobs=1, enable_cove
 
     #Set env vars
     if "BITCOIND" not in os.environ:
-        os.environ["BITCOIND"] = build_dir + '/src/bitcoind' + exeext
-        os.environ["BITCOINCLI"] = build_dir + '/src/bitcoin-cli' + exeext
+        blakecoind = build_dir + '/src/blakecoind' + exeext
+        bitcoind = build_dir + '/src/bitcoind' + exeext
+        blakecoin_cli = build_dir + '/src/blakecoin-cli' + exeext
+        bitcoin_cli = build_dir + '/src/bitcoin-cli' + exeext
+        os.environ["BITCOIND"] = blakecoind if os.path.exists(blakecoind) else bitcoind
+        os.environ["BITCOINCLI"] = blakecoin_cli if os.path.exists(blakecoin_cli) else bitcoin_cli
 
     tests_dir = src_dir + '/test/functional/'
 

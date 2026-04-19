@@ -4,9 +4,12 @@
 
 #include "base58.h"
 
+#include "bech32.h"
 #include "hash.h"
 #include "uint256.h"
+#include "utilstrencodings.h"
 
+#include <algorithm>
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -216,6 +219,45 @@ int CBase58Data::CompareTo(const CBase58Data& b58) const
 
 namespace
 {
+class DestinationEncoder : public boost::static_visitor<std::string>
+{
+private:
+    const CChainParams& m_params;
+
+public:
+    DestinationEncoder(const CChainParams& params) : m_params(params) {}
+
+    std::string operator()(const CKeyID& id) const
+    {
+        std::vector<unsigned char> data = m_params.Base58Prefix(CChainParams::PUBKEY_ADDRESS);
+        data.insert(data.end(), id.begin(), id.end());
+        return EncodeBase58Check(data);
+    }
+
+    std::string operator()(const CScriptID& id) const
+    {
+        std::vector<unsigned char> data = m_params.Base58Prefix(CChainParams::SCRIPT_ADDRESS);
+        data.insert(data.end(), id.begin(), id.end());
+        return EncodeBase58Check(data);
+    }
+
+    std::string operator()(const WitnessV0KeyHash& id) const
+    {
+        std::vector<unsigned char> data(1, 0);
+        ConvertBits<8, 5, true>(data, id.begin(), id.end());
+        return bech32::Encode(m_params.Bech32HRP(), data);
+    }
+
+    std::string operator()(const WitnessV0ScriptHash& id) const
+    {
+        std::vector<unsigned char> data(1, 0);
+        ConvertBits<8, 5, true>(data, id.begin(), id.end());
+        return bech32::Encode(m_params.Bech32HRP(), data);
+    }
+
+    std::string operator()(const CNoDestination& no) const { return std::string(); }
+};
+
 class CBitcoinAddressVisitor : public boost::static_visitor<bool>
 {
 private:
@@ -226,10 +268,49 @@ public:
 
     bool operator()(const CKeyID& id) const { return addr->Set(id); }
     bool operator()(const CScriptID& id) const { return addr->Set(id); }
+    bool operator()(const WitnessV0ScriptHash& id) const { return false; }
+    bool operator()(const WitnessV0KeyHash& id) const { return false; }
     bool operator()(const CNoDestination& no) const { return false; }
 };
 
 } // namespace
+
+CTxDestination DecodeDestination(const std::string& str, const CChainParams& params)
+{
+    std::vector<unsigned char> data;
+    uint160 hash;
+    if (DecodeBase58Check(str, data)) {
+        const std::vector<unsigned char>& pubkey_prefix = params.Base58Prefix(CChainParams::PUBKEY_ADDRESS);
+        if (data.size() == hash.size() + pubkey_prefix.size() && std::equal(pubkey_prefix.begin(), pubkey_prefix.end(), data.begin())) {
+            std::copy(data.begin() + pubkey_prefix.size(), data.end(), hash.begin());
+            return CKeyID(hash);
+        }
+
+        const std::vector<unsigned char>& script_prefix = params.Base58Prefix(CChainParams::SCRIPT_ADDRESS);
+        if (data.size() == hash.size() + script_prefix.size() && std::equal(script_prefix.begin(), script_prefix.end(), data.begin())) {
+            std::copy(data.begin() + script_prefix.size(), data.end(), hash.begin());
+            return CScriptID(hash);
+        }
+    }
+
+    data.clear();
+    std::pair<std::string, std::vector<uint8_t> > bech = bech32::Decode(str);
+    if (!bech.second.empty() && bech.first == params.Bech32HRP()) {
+        int version = bech.second[0];
+        if (ConvertBits<5, 8, false>(data, bech.second.begin() + 1, bech.second.end())) {
+            if (version == 0) {
+                if (data.size() == WitnessV0KeyHash().size()) {
+                    return WitnessV0KeyHash(data);
+                }
+                if (data.size() == WitnessV0ScriptHash().size()) {
+                    return WitnessV0ScriptHash(data);
+                }
+            }
+        }
+    }
+
+    return CNoDestination();
+}
 
 bool CBitcoinAddress::Set(const CKeyID& id)
 {
@@ -321,4 +402,24 @@ bool CBitcoinSecret::SetString(const char* pszSecret)
 bool CBitcoinSecret::SetString(const std::string& strSecret)
 {
     return SetString(strSecret.c_str());
+}
+
+std::string EncodeDestination(const CTxDestination& dest)
+{
+    return boost::apply_visitor(DestinationEncoder(Params()), dest);
+}
+
+CTxDestination DecodeDestination(const std::string& str)
+{
+    return DecodeDestination(str, Params());
+}
+
+bool IsValidDestinationString(const std::string& str, const CChainParams& params)
+{
+    return IsValidDestination(DecodeDestination(str, params));
+}
+
+bool IsValidDestinationString(const std::string& str)
+{
+    return IsValidDestinationString(str, Params());
 }

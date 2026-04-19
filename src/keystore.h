@@ -59,6 +59,8 @@ protected:
     ScriptMap mapScripts;
     WatchOnlySet setWatchOnly;
 
+    void ImplicitlyLearnRelatedKeyScripts(const CPubKey& pubkey);
+
 public:
     bool AddKeyPubKey(const CKey& key, const CPubKey &pubkey) override;
     bool GetPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const override;
@@ -109,5 +111,7 @@ public:
 
 typedef std::vector<unsigned char, secure_allocator<unsigned char> > CKeyingMaterial;
 typedef std::map<CKeyID, std::pair<CPubKey, std::vector<unsigned char> > > CryptedKeyMap;
+
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest);
 
 #endif // BITCOIN_KEYSTORE_H

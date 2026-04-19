@@ -33,6 +33,7 @@ bool CBasicKeyStore::AddKeyPubKey(const CKey& key, const CPubKey &pubkey)
 {
     LOCK(cs_KeyStore);
     mapKeys[pubkey.GetID()] = key;
+    ImplicitlyLearnRelatedKeyScripts(pubkey);
     return true;
 }
 
@@ -85,8 +86,10 @@ bool CBasicKeyStore::AddWatchOnly(const CScript &dest)
     LOCK(cs_KeyStore);
     setWatchOnly.insert(dest);
     CPubKey pubKey;
-    if (ExtractPubKey(dest, pubKey))
+    if (ExtractPubKey(dest, pubKey)) {
         mapWatchKeys[pubKey.GetID()] = pubKey;
+        ImplicitlyLearnRelatedKeyScripts(pubKey);
+    }
     return true;
 }
 
@@ -110,4 +113,36 @@ bool CBasicKeyStore::HaveWatchOnly() const
 {
     LOCK(cs_KeyStore);
     return (!setWatchOnly.empty());
+}
+
+void CBasicKeyStore::ImplicitlyLearnRelatedKeyScripts(const CPubKey& pubkey)
+{
+    AssertLockHeld(cs_KeyStore);
+    CKeyID key_id = pubkey.GetID();
+    assert(mapKeys.count(key_id) || mapWatchKeys.count(key_id));
+    if (pubkey.IsCompressed()) {
+        CScript script = GetScriptForDestination(WitnessV0KeyHash(key_id));
+        CScriptID id(script);
+        mapScripts[id] = script;
+    }
+}
+
+CKeyID GetKeyForDestination(const CKeyStore& store, const CTxDestination& dest)
+{
+    if (const CKeyID* id = boost::get<CKeyID>(&dest)) {
+        return *id;
+    }
+    if (const WitnessV0KeyHash* witness_id = boost::get<WitnessV0KeyHash>(&dest)) {
+        return CKeyID(*witness_id);
+    }
+    if (const CScriptID* script_id = boost::get<CScriptID>(&dest)) {
+        CScript script;
+        CTxDestination inner_dest;
+        if (store.GetCScript(*script_id, script) && ExtractDestination(script, inner_dest)) {
+            if (const WitnessV0KeyHash* inner_witness_id = boost::get<WitnessV0KeyHash>(&inner_dest)) {
+                return CKeyID(*inner_witness_id);
+            }
+        }
+    }
+    return CKeyID();
 }
