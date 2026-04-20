@@ -105,7 +105,7 @@ bash ./build.sh --appimage --pull-docker
 
 - Uses `sidgrip/appimage-base:22.04`
 - Produces a self-contained AppImage in `outputs/AppImage/`
-- The output folder keeps `Blakecoin-0.15.2-x86_64.AppImage`, `README.md`, and `build-info.txt`
+- The output folder keeps `Blakecoin-0.15.21-x86_64.AppImage`, `README.md`, and `build-info.txt`
 - Intended for Ubuntu `22.04+`
 - Direct launch on Ubuntu `22.04.5` needs `sudo apt install libfuse2`
 - Direct launch on Ubuntu `24.04.4` and `25.10` needs `sudo apt install libfuse2t64`
@@ -151,15 +151,15 @@ bash ./build.sh --native --both
 ```text
 outputs/
 ├── AppImage/
-│   ├── Blakecoin-0.15.2-x86_64.AppImage
+│   ├── Blakecoin-0.15.21-x86_64.AppImage
 │   ├── README.md
 │   └── build-info.txt
 ├── Macosx/
 │   ├── Blakecoin-Qt.app
-│   ├── blakecoin-cli-0.15.2
-│   ├── blakecoin-qt-0.15.2
-│   ├── blakecoin-tx-0.15.2
-│   ├── blakecoind-0.15.2
+│   ├── blakecoin-cli-0.15.21
+│   ├── blakecoin-qt-0.15.21
+│   ├── blakecoin-tx-0.15.21
+│   ├── blakecoind-0.15.21
 │   └── build-info.txt
 ├── Ubuntu-20/
 │   ├── README.md
@@ -176,10 +176,10 @@ outputs/
 ├── Ubuntu-24/
 ├── Ubuntu-25/
 └── Windows/
-    ├── blakecoin-cli-0.15.2.exe
-    ├── blakecoin-qt-0.15.2.exe
-    ├── blakecoin-tx-0.15.2.exe
-    ├── blakecoind-0.15.2.exe
+    ├── blakecoin-cli-0.15.21.exe
+    ├── blakecoin-qt-0.15.21.exe
+    ├── blakecoin-tx-0.15.21.exe
+    ├── blakecoind-0.15.21.exe
     └── build-info.txt
 ```
 
@@ -187,9 +187,9 @@ For Ubuntu native builds, the current host's final wallet files land in `outputs
 
 For Windows cross-builds from Linux, the output bundle lands in `outputs/Windows/`, using `.exe` binaries plus bundled `.dll` files, `qt.conf`, `platforms/qwindows.dll`, and `build-info.txt`.
 
-For native macOS builds, the current host's daemon tools, `Blakecoin-Qt.app`, and the raw `blakecoin-qt-0.15.2` binary all land in `outputs/Macosx/`.
+For native macOS builds, the current host's daemon tools, `Blakecoin-Qt.app`, and the raw `blakecoin-qt-0.15.21` binary all land in `outputs/Macosx/`.
 
-For AppImage builds, `outputs/AppImage/` keeps `Blakecoin-0.15.2-x86_64.AppImage`, `README.md`, and `build-info.txt`.
+For AppImage builds, `outputs/AppImage/` keeps `Blakecoin-0.15.21-x86_64.AppImage`, `README.md`, and `build-info.txt`.
 
 ---
 
