@@ -2,7 +2,9 @@
   <img src="src/qt/res/icons/bitcoin.png" alt="Blakecoin" width="95">
 </p>
 
-# Blakecoin 0.15.2
+# Blakecoin 0.15.21
+
+> SegWit signaling schedule: Blakecoin mainnet versionbits signaling starts on May 4, 2026 00:00:00 UTC (`1777852800`) and times out on May 4, 2027 00:00:00 UTC (`1809388800`). Blakecoin signals one week before the aux chains.
 
 ## About Blakecoin
 

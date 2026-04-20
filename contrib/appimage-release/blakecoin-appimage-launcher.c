@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     }
     *slash = '\0';
 
-    if (snprintf(payload_path, sizeof(payload_path), "%s/.runtime/Blakecoin-0.15.2-x86_64.AppImage.payload", app_dir) >= (int)sizeof(payload_path)) {
+    if (snprintf(payload_path, sizeof(payload_path), "%s/.runtime/Blakecoin-0.15.21-x86_64.AppImage.payload", app_dir) >= (int)sizeof(payload_path)) {
         fprintf(stderr, "Payload path is too long\n");
         return 1;
     }

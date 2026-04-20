@@ -51,9 +51,6 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
     assert(pindexFirst);
 
-    LogPrintf("DEBUG: GetNextWorkRequired at height %d (next block)\n", pindexLast->nHeight + 1);
-    LogPrintf("DEBUG:   pindexLast height: %d, nBits: 0x%08x, time: %d\n", pindexLast->nHeight, pindexLast->nBits, pindexLast->GetBlockTime());
-    LogPrintf("DEBUG:   pindexFirst height: %d, time: %d\n", pindexFirst->nHeight, pindexFirst->GetBlockTime());
 
     return CalculateNextWorkRequired(pindexLast, pindexFirst->GetBlockTime(), params);
 }
@@ -89,19 +86,16 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
         nActualTimespan = nMaxActualTimespan;
     // END BLAKECOIN
 
-    LogPrintf("DEBUG:   nActualTimespan clamped: %d seconds\n", nActualTimespan);
 
     // Retarget
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
     arith_uint256 bnNew;
     bnNew.SetCompact(pindexLast->nBits);
     
-    LogPrintf("DEBUG:   bnNew before retarget: 0x%s (compact: 0x%08x)\n", bnNew.GetHex(), pindexLast->nBits);
     
     bnNew *= nActualTimespan;
     bnNew /= nTargetTimespan;
 
-    LogPrintf("DEBUG:   bnNew after retarget: 0x%s (compact: 0x%08x)\n", bnNew.GetHex(), bnNew.GetCompact());
 
     if (bnNew > bnPowLimit)
         bnNew = bnPowLimit;

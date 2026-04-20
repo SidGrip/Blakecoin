@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Blakecoin 0.15.2 Build Script  -  All Platforms
+# Blakecoin 0.15.21 Build Script  -  All Platforms
 #
 # Single self-contained script to build Blakecoin daemon and/or Qt wallet
 # for Linux, macOS, Windows, and AppImage.
@@ -35,7 +35,7 @@ DAEMON_NAME="blakecoind"
 QT_NAME="blakecoin-qt"
 CLI_NAME="blakecoin-cli"
 TX_NAME="blakecoin-tx"
-VERSION="0.15.2"
+VERSION="0.15.21"
 REPO_URL="https://github.com/BlueDragon747/Blakecoin.git"
 REPO_BRANCH="master"
 QT_LINUX_LAUNCHER_SOURCE="$SCRIPT_DIR/contrib/linux-release/blakecoin-qt-launcher.c"
@@ -64,7 +64,7 @@ SERVER='server=1'
 TXINDEX='txindex=0'
 
 # Docker images
-DOCKER_NATIVE="${DOCKER_NATIVE:-sidgrip/native-base:22.04}"
+DOCKER_NATIVE="${DOCKER_NATIVE:-sidgrip/native-base:24.04}"
 DOCKER_APPIMAGE="${DOCKER_APPIMAGE:-sidgrip/appimage-base:22.04}"
 DOCKER_WINDOWS="${DOCKER_WINDOWS:-sidgrip/mxe-base:latest}"
 DOCKER_MACOS="${DOCKER_MACOS:-sidgrip/osxcross-base:sdk-26.2}"
@@ -277,8 +277,8 @@ Examples:
 
 Docker Hub images (used with --pull-docker):
   sidgrip/native-base:20.04             Native Linux (Ubuntu 20.04, GCC 9)
-  sidgrip/native-base:22.04             Native Linux (Ubuntu 22.04, GCC 11) [default]
-  sidgrip/native-base:24.04             Native Linux (Ubuntu 24.04, GCC 13)
+  sidgrip/native-base:22.04             Native Linux (Ubuntu 22.04, GCC 11)
+  sidgrip/native-base:24.04             Native Linux (Ubuntu 24.04, GCC 13) [default]
   sidgrip/native-base:25.10             Native Linux (Ubuntu 25.10, GCC 15)
   sidgrip/appimage-base:22.04           AppImage (Ubuntu 22.04 + appimagetool)
   sidgrip/mxe-base:latest               Windows cross-compile (MXE + MinGW)
@@ -697,7 +697,7 @@ write_build_info() {
 
     mkdir -p "$output_dir"
     cat > "$output_dir/build-info.txt" <<EOF
-Coin:       $COIN_NAME_UPPER 0.15.2
+Coin:       $COIN_NAME_UPPER 0.15.21
 Target:     $target
 Platform:   $platform
 OS:         $os_version
@@ -2089,6 +2089,9 @@ fi
 
 echo ">>> Creating Boost -mt symlinks (configure looks for suffixed versions)..."
 for lib in $PREFIX/lib/libboost_*.a; do
+    case "$lib" in
+        *-mt.a) continue ;;
+    esac
     mt="${lib%.a}-mt.a"
     [ ! -f "$mt" ] && ln -sf "$(basename "$lib")" "$mt"
 done
@@ -2379,6 +2382,16 @@ fi
 BOOST_PREFIX="$PWD/depends/$HOST"
 CONFIGURE_EXTRA="$CONFIGURE_EXTRA --with-boost=$BOOST_PREFIX --with-boost-libdir=$BOOST_PREFIX/lib"
 
+echo ">>> Creating Boost -mt symlinks (configure looks for suffixed versions)..."
+for lib in "$BOOST_PREFIX"/lib/libboost_*.a; do
+    [ -e "$lib" ] || continue
+    case "$lib" in
+        *-mt.a) continue ;;
+    esac
+    mt="${lib%.a}-mt.a"
+    [ -f "$mt" ] || ln -sf "$(basename "$lib")" "$mt"
+done
+
 echo ">>> Running autogen.sh..."
 ./autogen.sh
 
@@ -2482,7 +2495,7 @@ build_appimage() {
 
     echo ""
     echo "============================================"
-    echo "  AppImage Build: $COIN_NAME_UPPER 0.15.2"
+    echo "  AppImage Build: $COIN_NAME_UPPER 0.15.21"
     echo "============================================"
     echo "  Image:  $DOCKER_APPIMAGE"
     echo ""
@@ -2685,7 +2698,7 @@ cat > "$APPDIR/'"$COIN_NAME"'.desktop" << '\''DESKTOP_EOF'\''
 [Desktop Entry]
 Type=Application
 Name='"$COIN_NAME_UPPER"'
-Comment='"$COIN_NAME_UPPER"' 0.15.2 Cryptocurrency Wallet
+Comment='"$COIN_NAME_UPPER"' 0.15.21 Cryptocurrency Wallet
 Exec='"$QT_NAME"'
 Icon='"$COIN_NAME"'
 Categories=Network;Finance;
@@ -2758,8 +2771,8 @@ chmod +x "$APPDIR/AppRun"
 echo ">>> Creating AppImage..."
 mkdir -p /build/output
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool --no-appstream "$APPDIR" \
-    "/build/output/'"$COIN_NAME_UPPER"'-0.15.2-x86_64.AppImage"
-chmod +x "/build/output/'"$COIN_NAME_UPPER"'-0.15.2-x86_64.AppImage"
+    "/build/output/'"$COIN_NAME_UPPER"'-0.15.21-x86_64.AppImage"
+chmod +x "/build/output/'"$COIN_NAME_UPPER"'-0.15.21-x86_64.AppImage"
 
 echo ">>> AppImage build complete!"
 ls -lh /build/output/
@@ -2811,7 +2824,7 @@ build_native_docker() {
 
     echo ""
     echo "============================================"
-    echo "  Native Docker Build: $COIN_NAME_UPPER 0.15.2"
+    echo "  Native Docker Build: $COIN_NAME_UPPER 0.15.21"
     echo "============================================"
     echo "  Image:  $DOCKER_NATIVE"
     echo "  Target: $target"
@@ -2966,7 +2979,7 @@ build_native_linux_direct() {
 
     echo ""
     echo "============================================"
-    echo "  Native Linux Build: $COIN_NAME_UPPER 0.15.2"
+    echo "  Native Linux Build: $COIN_NAME_UPPER 0.15.21"
     echo "============================================"
     echo ""
 
@@ -3112,7 +3125,7 @@ build_native_macos() {
 
     echo ""
     echo "============================================"
-    echo "  Native macOS Build: $COIN_NAME_UPPER 0.15.2"
+    echo "  Native macOS Build: $COIN_NAME_UPPER 0.15.21"
     echo "============================================"
     echo ""
 
@@ -3399,7 +3412,7 @@ build_native_windows() {
 
     echo ""
     echo "============================================"
-    echo "  Native Windows Build: $COIN_NAME_UPPER 0.15.2"
+    echo "  Native Windows Build: $COIN_NAME_UPPER 0.15.21"
     echo "============================================"
     echo ""
 
@@ -3589,7 +3602,7 @@ PY
         CFLAGS="$windows_cflags" \
         CXXFLAGS="$windows_cxxflags"
 
-    # Blakecoin 0.15.2 does not ship the upstream translation payloads.
+    # Blakecoin 0.15.21 does not ship the upstream translation payloads.
     if [[ -f src/Makefile ]]; then
         sedi 's/^QT_QM.*=.*/QT_QM =/' src/Makefile
         sedi '/bitcoin_.*\.qm/d' src/Makefile
@@ -3765,7 +3778,7 @@ main() {
 
     echo ""
     echo "============================================"
-    echo "  $COIN_NAME_UPPER 0.15.2 Build System"
+    echo "  $COIN_NAME_UPPER 0.15.21 Build System"
     echo "============================================"
     echo "  Platform: $platform"
     echo "  Target:   $target"
