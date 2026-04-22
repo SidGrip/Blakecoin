@@ -67,10 +67,10 @@ can then be controlled by group membership.
 
 3b) Mac OS X
 
-Binary:              `/usr/local/bin/bitcoind`  
-Configuration file:  `~/Library/Application Support/Bitcoin/bitcoin.conf`  
-Data directory:      `~/Library/Application Support/Bitcoin`
-Lock file:           `~/Library/Application Support/Bitcoin/.lock`
+Binary:              `/usr/local/bin/blakecoind`
+Configuration file:  `~/Library/Application Support/Blakecoin/blakecoin.conf`
+Data directory:      `~/Library/Application Support/Blakecoin`
+Lock file:           `~/Library/Application Support/Blakecoin/.lock`
 
 4. Installing Service Configuration
 -----------------------------------

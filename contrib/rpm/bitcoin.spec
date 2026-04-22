@@ -265,15 +265,15 @@ mkdir -p %{buildroot}%{_datadir}/applications
 cat <<EOF > %{buildroot}%{_datadir}/applications/bitcoin-core.desktop
 [Desktop Entry]
 Encoding=UTF-8
-Name=Bitcoin
-Comment=Bitcoin P2P Cryptocurrency
-Comment[fr]=Bitcoin, monnaie virtuelle cryptographique pair à pair
-Comment[tr]=Bitcoin, eşten eşe kriptografik sanal para birimi
-Exec=bitcoin-qt %u
+Name=Blakecoin
+Comment=Blakecoin P2P Cryptocurrency
+Comment[fr]=Blakecoin, monnaie virtuelle cryptographique pair à pair
+Comment[tr]=Blakecoin, eşten eşe kriptografik sanal para birimi
+Exec=blakecoin-qt %u
 Terminal=false
 Type=Application
 Icon=bitcoin128
-MimeType=x-scheme-handler/bitcoin;
+MimeType=x-scheme-handler/blakecoin;
 Categories=Office;Finance;
 EOF
 # change touch date when modifying desktop
