@@ -163,6 +163,80 @@ BOOST_AUTO_TEST_CASE(sighash_test)
     #endif
 }
 
+BOOST_AUTO_TEST_CASE(bip143_witness_sighash_uses_double_sha256)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = 2;
+    mtx.nLockTime = 42;
+    mtx.vin.resize(2);
+    mtx.vin[0].prevout = COutPoint(uint256S("57f7e6c0f7f3a749731f9f3341bd7bf14bb1e8ff6937dc60d92a71feeb2d1f20"), 1);
+    mtx.vin[0].nSequence = 0xfffffffe;
+    mtx.vin[1].prevout = COutPoint(uint256S("06c4cf49a7c2ca6d7c86f82a1f4f1d0bce6bb7ef6544fbc5f1ec7e66e92bc93d"), 0);
+    mtx.vin[1].nSequence = 0xfffffffd;
+    mtx.vout.push_back(CTxOut(1111, CScript() << OP_1));
+    mtx.vout.push_back(CTxOut(2222, CScript() << OP_2));
+    const CTransaction txTo(mtx);
+
+    uint256 hashPrevouts;
+    uint256 hashSequence;
+    uint256 hashOutputs;
+    {
+        CBIP143HashWriter ss(SER_GETHASH, 0);
+        for (const auto& txin : txTo.vin) {
+            ss << txin.prevout;
+        }
+        hashPrevouts = ss.GetHash();
+    }
+    {
+        CBIP143HashWriter ss(SER_GETHASH, 0);
+        for (const auto& txin : txTo.vin) {
+            ss << txin.nSequence;
+        }
+        hashSequence = ss.GetHash();
+    }
+    {
+        CBIP143HashWriter ss(SER_GETHASH, 0);
+        for (const auto& txout : txTo.vout) {
+            ss << txout;
+        }
+        hashOutputs = ss.GetHash();
+    }
+
+    const CScript scriptCode = CScript() << OP_DUP << OP_HASH160 << ParseHex("00112233445566778899aabbccddeeff00112233") << OP_EQUALVERIFY << OP_CHECKSIG;
+    const CAmount amount = 987654321;
+    const int nHashType = SIGHASH_ALL;
+
+    CBIP143HashWriter double_writer(SER_GETHASH, 0);
+    double_writer << txTo.nVersion;
+    double_writer << hashPrevouts;
+    double_writer << hashSequence;
+    double_writer << txTo.vin[0].prevout;
+    double_writer << scriptCode;
+    double_writer << amount;
+    double_writer << txTo.vin[0].nSequence;
+    double_writer << hashOutputs;
+    double_writer << txTo.nLockTime;
+    double_writer << nHashType;
+    const uint256 expected_double_sha256 = double_writer.GetHash();
+
+    CHashWriter single_writer(SER_GETHASH, 0);
+    single_writer << txTo.nVersion;
+    single_writer << hashPrevouts;
+    single_writer << hashSequence;
+    single_writer << txTo.vin[0].prevout;
+    single_writer << scriptCode;
+    single_writer << amount;
+    single_writer << txTo.vin[0].nSequence;
+    single_writer << hashOutputs;
+    single_writer << txTo.nLockTime;
+    single_writer << nHashType;
+    const uint256 single_sha256 = single_writer.GetHash();
+
+    const uint256 actual = SignatureHash(scriptCode, txTo, 0, nHashType, amount, SIGVERSION_WITNESS_V0);
+    BOOST_CHECK(actual == expected_double_sha256);
+    BOOST_CHECK(actual != single_sha256);
+}
+
 // Goal: check that SignatureHash generates correct hash
 BOOST_AUTO_TEST_CASE(sighash_from_data)
 {

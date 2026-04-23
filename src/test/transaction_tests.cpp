@@ -11,10 +11,12 @@
 #include "consensus/tx_verify.h"
 #include "consensus/validation.h"
 #include "core_io.h"
+#include "hash.h"
 #include "key.h"
 #include "keystore.h"
 #include "validation.h"
 #include "policy/policy.h"
+#include "script/interpreter.h"
 #include "script/script.h"
 #include "script/sign.h"
 #include "script/script_error.h"
@@ -91,6 +93,135 @@ std::string FormatScriptFlags(unsigned int flags)
 }
 
 BOOST_FIXTURE_TEST_SUITE(transaction_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(txid_uses_single_sha256)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = 2;
+    mtx.nLockTime = 123;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("7b1eabe0209b1fe794124575ef807057c77ada2138ae4fa8d6c4de0398a14f3f"), 0);
+    mtx.vin[0].nSequence = 0xfffffffe;
+    mtx.vout.push_back(CTxOut(5000, CScript() << OP_1));
+
+    CHashWriter single_writer(SER_GETHASH, SERIALIZE_TRANSACTION_NO_WITNESS);
+    single_writer << mtx;
+    const uint256 expected_txid = single_writer.GetHash();
+
+    CBIP143HashWriter double_writer(SER_GETHASH, SERIALIZE_TRANSACTION_NO_WITNESS);
+    double_writer << mtx;
+    const uint256 double_sha256_txid = double_writer.GetHash();
+
+    const CTransaction tx(mtx);
+    BOOST_CHECK(mtx.GetHash() == expected_txid);
+    BOOST_CHECK(tx.GetHash() == expected_txid);
+    BOOST_CHECK(expected_txid != double_sha256_txid);
+}
+
+static uint256 SingleShaBIP143SignatureHashForTest(const CScript& scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType, const CAmount& amount)
+{
+    uint256 hashPrevouts;
+    uint256 hashSequence;
+    uint256 hashOutputs;
+
+    if (!(nHashType & SIGHASH_ANYONECANPAY)) {
+        CHashWriter ss(SER_GETHASH, 0);
+        for (const auto& txin : txTo.vin) {
+            ss << txin.prevout;
+        }
+        hashPrevouts = ss.GetHash();
+    }
+
+    if (!(nHashType & SIGHASH_ANYONECANPAY) && (nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+        CHashWriter ss(SER_GETHASH, 0);
+        for (const auto& txin : txTo.vin) {
+            ss << txin.nSequence;
+        }
+        hashSequence = ss.GetHash();
+    }
+
+    if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+        CHashWriter ss(SER_GETHASH, 0);
+        for (const auto& txout : txTo.vout) {
+            ss << txout;
+        }
+        hashOutputs = ss.GetHash();
+    } else if ((nHashType & 0x1f) == SIGHASH_SINGLE && nIn < txTo.vout.size()) {
+        CHashWriter ss(SER_GETHASH, 0);
+        ss << txTo.vout[nIn];
+        hashOutputs = ss.GetHash();
+    }
+
+    CHashWriter ss(SER_GETHASH, 0);
+    ss << txTo.nVersion;
+    ss << hashPrevouts;
+    ss << hashSequence;
+    ss << txTo.vin[nIn].prevout;
+    ss << scriptCode;
+    ss << amount;
+    ss << txTo.vin[nIn].nSequence;
+    ss << hashOutputs;
+    ss << txTo.nLockTime;
+    ss << nHashType;
+    return ss.GetHash();
+}
+
+BOOST_AUTO_TEST_CASE(segwit_spend_accepts_double_sha_bip143_rejects_single_sha)
+{
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pubkey = key.GetPubKey();
+    const CKeyID keyid = pubkey.GetID();
+    const CScript scriptPubKey = CScript() << OP_0 << std::vector<unsigned char>(keyid.begin(), keyid.end());
+    const CScript scriptCode = GetScriptForDestination(keyid);
+    const CAmount amount = 123456789;
+    const int nHashType = SIGHASH_ALL;
+
+    CMutableTransaction credit;
+    credit.nVersion = 1;
+    credit.vin.resize(1);
+    credit.vin[0].prevout.SetNull();
+    credit.vout.resize(1);
+    credit.vout[0].nValue = amount;
+    credit.vout[0].scriptPubKey = scriptPubKey;
+    const CTransaction credit_tx(credit);
+
+    CMutableTransaction spend;
+    spend.nVersion = 2;
+    spend.vin.resize(1);
+    spend.vin[0].prevout = COutPoint(credit_tx.GetHash(), 0);
+    spend.vin[0].nSequence = 0xfffffffe;
+    spend.vout.resize(1);
+    spend.vout[0].nValue = amount - 1000;
+    spend.vout[0].scriptPubKey = CScript() << OP_1;
+
+    std::vector<unsigned char> double_sig;
+    BOOST_REQUIRE(key.Sign(SignatureHash(scriptCode, CTransaction(spend), 0, nHashType, amount, SIGVERSION_WITNESS_V0), double_sig));
+    double_sig.push_back((unsigned char)nHashType);
+    spend.vin[0].scriptWitness.stack.push_back(double_sig);
+    spend.vin[0].scriptWitness.stack.push_back(ToByteVector(pubkey));
+
+    const CTransaction double_signed_tx(spend);
+    ScriptError err = SCRIPT_ERR_OK;
+    BOOST_CHECK(VerifyScript(double_signed_tx.vin[0].scriptSig, scriptPubKey, &double_signed_tx.vin[0].scriptWitness,
+                             SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS,
+                             TransactionSignatureChecker(&double_signed_tx, 0, amount), &err));
+
+    CMutableTransaction single_signed(spend);
+    single_signed.vin[0].scriptWitness.SetNull();
+    const CTransaction unsigned_single_tx(single_signed);
+    std::vector<unsigned char> single_sig;
+    BOOST_REQUIRE(key.Sign(SingleShaBIP143SignatureHashForTest(scriptCode, unsigned_single_tx, 0, nHashType, amount), single_sig));
+    single_sig.push_back((unsigned char)nHashType);
+    single_signed.vin[0].scriptWitness.stack.push_back(single_sig);
+    single_signed.vin[0].scriptWitness.stack.push_back(ToByteVector(pubkey));
+
+    const CTransaction single_signed_tx(single_signed);
+    err = SCRIPT_ERR_OK;
+    BOOST_CHECK(!VerifyScript(single_signed_tx.vin[0].scriptSig, scriptPubKey, &single_signed_tx.vin[0].scriptWitness,
+                              SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS,
+                              TransactionSignatureChecker(&single_signed_tx, 0, amount), &err));
+}
 
 BOOST_AUTO_TEST_CASE(tx_valid)
 {

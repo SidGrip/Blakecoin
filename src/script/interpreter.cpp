@@ -1141,7 +1141,7 @@ public:
 };
 
 uint256 GetPrevoutHash(const CTransaction& txTo) {
-    CHashWriter ss(SER_GETHASH, 0);
+    CBIP143HashWriter ss(SER_GETHASH, 0);
     for (const auto& txin : txTo.vin) {
         ss << txin.prevout;
     }
@@ -1149,7 +1149,7 @@ uint256 GetPrevoutHash(const CTransaction& txTo) {
 }
 
 uint256 GetSequenceHash(const CTransaction& txTo) {
-    CHashWriter ss(SER_GETHASH, 0);
+    CBIP143HashWriter ss(SER_GETHASH, 0);
     for (const auto& txin : txTo.vin) {
         ss << txin.nSequence;
     }
@@ -1157,7 +1157,7 @@ uint256 GetSequenceHash(const CTransaction& txTo) {
 }
 
 uint256 GetOutputsHash(const CTransaction& txTo) {
-    CHashWriter ss(SER_GETHASH, 0);
+    CBIP143HashWriter ss(SER_GETHASH, 0);
     for (const auto& txout : txTo.vout) {
         ss << txout;
     }
@@ -1192,12 +1192,12 @@ uint256 SignatureHash(const CScript& scriptCode, const CTransaction& txTo, unsig
         if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
             hashOutputs = cache ? cache->hashOutputs : GetOutputsHash(txTo);
         } else if ((nHashType & 0x1f) == SIGHASH_SINGLE && nIn < txTo.vout.size()) {
-            CHashWriter ss(SER_GETHASH, 0);
+            CBIP143HashWriter ss(SER_GETHASH, 0);
             ss << txTo.vout[nIn];
             hashOutputs = ss.GetHash();
         }
 
-        CHashWriter ss(SER_GETHASH, 0);
+        CBIP143HashWriter ss(SER_GETHASH, 0);
         // Version
         ss << txTo.nVersion;
         // Input prevouts/nSequence (none/all, depending on flags)

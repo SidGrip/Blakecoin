@@ -358,6 +358,7 @@ libbitcoin_cli_a_OBJECTS = $(am_libbitcoin_cli_a_OBJECTS)
 libbitcoin_common_a_AR = $(AR) $(ARFLAGS)
 libbitcoin_common_a_LIBADD =
 am_libbitcoin_common_a_OBJECTS = libbitcoin_common_a-base58.$(OBJEXT) \
+	libbitcoin_common_a-bech32.$(OBJEXT) \
 	libbitcoin_common_a-chainparams.$(OBJEXT) \
 	libbitcoin_common_a-coins.$(OBJEXT) \
 	libbitcoin_common_a-compressor.$(OBJEXT) \
@@ -379,6 +380,7 @@ libbitcoin_consensus_a_LIBADD =
 am_libbitcoin_consensus_a_OBJECTS =  \
 	libbitcoin_consensus_a-arith_uint256.$(OBJEXT) \
 	consensus/libbitcoin_consensus_a-merkle.$(OBJEXT) \
+	crypto/blake/libbitcoin_consensus_a-blake.$(OBJEXT) \
 	libbitcoin_consensus_a-hash.$(OBJEXT) \
 	primitives/libbitcoin_consensus_a-block.$(OBJEXT) \
 	primitives/libbitcoin_consensus_a-transaction.$(OBJEXT) \
@@ -796,8 +798,9 @@ am__libbitcoinconsensus_la_SOURCES_DIST = crypto/aes.cpp crypto/aes.h \
 	crypto/sha512.cpp crypto/sha512.h crypto/sha256_sse4.cpp \
 	amount.h arith_uint256.cpp arith_uint256.h \
 	consensus/merkle.cpp consensus/merkle.h consensus/params.h \
-	consensus/validation.h hash.cpp hash.h prevector.h \
-	primitives/block.cpp primitives/block.h \
+	consensus/validation.h crypto/blake/blake.cpp \
+	crypto/blake/sph_blake.h crypto/blake/sph_types.h hash.cpp \
+	hash.h prevector.h primitives/block.cpp primitives/block.h \
 	primitives/transaction.cpp primitives/transaction.h pubkey.cpp \
 	pubkey.h script/bitcoinconsensus.cpp script/interpreter.cpp \
 	script/interpreter.h script/script.cpp script/script.h \
@@ -815,6 +818,7 @@ am__objects_17 = crypto/libbitcoinconsensus_la-aes.lo \
 	crypto/libbitcoinconsensus_la-sha512.lo $(am__objects_16)
 am__objects_18 = libbitcoinconsensus_la-arith_uint256.lo \
 	consensus/libbitcoinconsensus_la-merkle.lo \
+	crypto/blake/libbitcoinconsensus_la-blake.lo \
 	libbitcoinconsensus_la-hash.lo \
 	primitives/libbitcoinconsensus_la-block.lo \
 	primitives/libbitcoinconsensus_la-transaction.lo \
@@ -1995,6 +1999,9 @@ libbitcoin_consensus_a_SOURCES = \
   consensus/merkle.h \
   consensus/params.h \
   consensus/validation.h \
+  crypto/blake/blake.cpp \
+  crypto/blake/sph_blake.h \
+  crypto/blake/sph_types.h \
   hash.cpp \
   hash.h \
   prevector.h \
@@ -2025,6 +2032,7 @@ libbitcoin_common_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
 libbitcoin_common_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libbitcoin_common_a_SOURCES = \
   base58.cpp \
+  bech32.cpp \
   chainparams.cpp \
   coins.cpp \
   compressor.cpp \
@@ -2880,6 +2888,18 @@ crypto/libbitcoin_crypto.a: $(crypto_libbitcoin_crypto_a_OBJECTS) $(crypto_libbi
 	$(AM_V_at)-rm -f crypto/libbitcoin_crypto.a
 	$(AM_V_AR)$(crypto_libbitcoin_crypto_a_AR) crypto/libbitcoin_crypto.a $(crypto_libbitcoin_crypto_a_OBJECTS) $(crypto_libbitcoin_crypto_a_LIBADD)
 	$(AM_V_at)$(RANLIB) crypto/libbitcoin_crypto.a
+crypto/blake/$(am__dirstamp):
+	@$(MKDIR_P) crypto/blake
+	@: > crypto/blake/$(am__dirstamp)
+crypto/blake/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) crypto/blake/$(DEPDIR)
+	@: > crypto/blake/$(DEPDIR)/$(am__dirstamp)
+crypto/blake/libbitcoin_consensus_a-blake.$(OBJEXT):  \
+	crypto/blake/$(am__dirstamp) \
+	crypto/blake/$(DEPDIR)/$(am__dirstamp)
+crypto/blake/libbitcoinconsensus_la-blake.lo:  \
+	crypto/blake/$(am__dirstamp) \
+	crypto/blake/$(DEPDIR)/$(am__dirstamp)
 leveldb/db/$(am__dirstamp):
 	@$(MKDIR_P) leveldb/db
 	@: > leveldb/db/$(am__dirstamp)
@@ -3861,6 +3881,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bitcoin_tx-bitcoin-tx.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bitcoind-bitcoind.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libbitcoin_common_a-base58.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libbitcoin_common_a-bech32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libbitcoin_common_a-chainparams.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libbitcoin_common_a-coins.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libbitcoin_common_a-compressor.Po@am__quote@
@@ -3959,6 +3980,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@crypto/$(DEPDIR)/libbitcoinconsensus_la-sha256.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@crypto/$(DEPDIR)/libbitcoinconsensus_la-sha256_sse4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@crypto/$(DEPDIR)/libbitcoinconsensus_la-sha512.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@crypto/blake/$(DEPDIR)/libbitcoinconsensus_la-blake.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@leveldb/db/$(DEPDIR)/leveldb_libleveldb_a-builder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@leveldb/db/$(DEPDIR)/leveldb_libleveldb_a-c.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@leveldb/db/$(DEPDIR)/leveldb_libleveldb_a-db_impl.Po@am__quote@
@@ -5000,6 +5023,20 @@ libbitcoin_common_a-base58.obj: base58.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_common_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_common_a_CXXFLAGS) $(CXXFLAGS) -c -o libbitcoin_common_a-base58.obj `if test -f 'base58.cpp'; then $(CYGPATH_W) 'base58.cpp'; else $(CYGPATH_W) '$(srcdir)/base58.cpp'; fi`
 
+libbitcoin_common_a-bech32.o: bech32.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_common_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_common_a_CXXFLAGS) $(CXXFLAGS) -MT libbitcoin_common_a-bech32.o -MD -MP -MF $(DEPDIR)/libbitcoin_common_a-bech32.Tpo -c -o libbitcoin_common_a-bech32.o `test -f 'bech32.cpp' || echo '$(srcdir)/'`bech32.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libbitcoin_common_a-bech32.Tpo $(DEPDIR)/libbitcoin_common_a-bech32.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='bech32.cpp' object='libbitcoin_common_a-bech32.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_common_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_common_a_CXXFLAGS) $(CXXFLAGS) -c -o libbitcoin_common_a-bech32.o `test -f 'bech32.cpp' || echo '$(srcdir)/'`bech32.cpp
+
+libbitcoin_common_a-bech32.obj: bech32.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_common_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_common_a_CXXFLAGS) $(CXXFLAGS) -MT libbitcoin_common_a-bech32.obj -MD -MP -MF $(DEPDIR)/libbitcoin_common_a-bech32.Tpo -c -o libbitcoin_common_a-bech32.obj `if test -f 'bech32.cpp'; then $(CYGPATH_W) 'bech32.cpp'; else $(CYGPATH_W) '$(srcdir)/bech32.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libbitcoin_common_a-bech32.Tpo $(DEPDIR)/libbitcoin_common_a-bech32.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='bech32.cpp' object='libbitcoin_common_a-bech32.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_common_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_common_a_CXXFLAGS) $(CXXFLAGS) -c -o libbitcoin_common_a-bech32.obj `if test -f 'bech32.cpp'; then $(CYGPATH_W) 'bech32.cpp'; else $(CYGPATH_W) '$(srcdir)/bech32.cpp'; fi`
+
 libbitcoin_common_a-chainparams.o: chainparams.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_common_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_common_a_CXXFLAGS) $(CXXFLAGS) -MT libbitcoin_common_a-chainparams.o -MD -MP -MF $(DEPDIR)/libbitcoin_common_a-chainparams.Tpo -c -o libbitcoin_common_a-chainparams.o `test -f 'chainparams.cpp' || echo '$(srcdir)/'`chainparams.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libbitcoin_common_a-chainparams.Tpo $(DEPDIR)/libbitcoin_common_a-chainparams.Po
@@ -5237,6 +5274,20 @@ consensus/libbitcoin_consensus_a-merkle.obj: consensus/merkle.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='consensus/merkle.cpp' object='consensus/libbitcoin_consensus_a-merkle.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_consensus_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_consensus_a_CXXFLAGS) $(CXXFLAGS) -c -o consensus/libbitcoin_consensus_a-merkle.obj `if test -f 'consensus/merkle.cpp'; then $(CYGPATH_W) 'consensus/merkle.cpp'; else $(CYGPATH_W) '$(srcdir)/consensus/merkle.cpp'; fi`
+
+crypto/blake/libbitcoin_consensus_a-blake.o: crypto/blake/blake.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_consensus_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_consensus_a_CXXFLAGS) $(CXXFLAGS) -MT crypto/blake/libbitcoin_consensus_a-blake.o -MD -MP -MF crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Tpo -c -o crypto/blake/libbitcoin_consensus_a-blake.o `test -f 'crypto/blake/blake.cpp' || echo '$(srcdir)/'`crypto/blake/blake.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Tpo crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='crypto/blake/blake.cpp' object='crypto/blake/libbitcoin_consensus_a-blake.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_consensus_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_consensus_a_CXXFLAGS) $(CXXFLAGS) -c -o crypto/blake/libbitcoin_consensus_a-blake.o `test -f 'crypto/blake/blake.cpp' || echo '$(srcdir)/'`crypto/blake/blake.cpp
+
+crypto/blake/libbitcoin_consensus_a-blake.obj: crypto/blake/blake.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_consensus_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_consensus_a_CXXFLAGS) $(CXXFLAGS) -MT crypto/blake/libbitcoin_consensus_a-blake.obj -MD -MP -MF crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Tpo -c -o crypto/blake/libbitcoin_consensus_a-blake.obj `if test -f 'crypto/blake/blake.cpp'; then $(CYGPATH_W) 'crypto/blake/blake.cpp'; else $(CYGPATH_W) '$(srcdir)/crypto/blake/blake.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Tpo crypto/blake/$(DEPDIR)/libbitcoin_consensus_a-blake.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='crypto/blake/blake.cpp' object='crypto/blake/libbitcoin_consensus_a-blake.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_consensus_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_consensus_a_CXXFLAGS) $(CXXFLAGS) -c -o crypto/blake/libbitcoin_consensus_a-blake.obj `if test -f 'crypto/blake/blake.cpp'; then $(CYGPATH_W) 'crypto/blake/blake.cpp'; else $(CYGPATH_W) '$(srcdir)/crypto/blake/blake.cpp'; fi`
 
 libbitcoin_consensus_a-hash.o: hash.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoin_consensus_a_CPPFLAGS) $(CPPFLAGS) $(libbitcoin_consensus_a_CXXFLAGS) $(CXXFLAGS) -MT libbitcoin_consensus_a-hash.o -MD -MP -MF $(DEPDIR)/libbitcoin_consensus_a-hash.Tpo -c -o libbitcoin_consensus_a-hash.o `test -f 'hash.cpp' || echo '$(srcdir)/'`hash.cpp
@@ -7722,6 +7773,13 @@ consensus/libbitcoinconsensus_la-merkle.lo: consensus/merkle.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='consensus/merkle.cpp' object='consensus/libbitcoinconsensus_la-merkle.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoinconsensus_la_CPPFLAGS) $(CPPFLAGS) $(libbitcoinconsensus_la_CXXFLAGS) $(CXXFLAGS) -c -o consensus/libbitcoinconsensus_la-merkle.lo `test -f 'consensus/merkle.cpp' || echo '$(srcdir)/'`consensus/merkle.cpp
+
+crypto/blake/libbitcoinconsensus_la-blake.lo: crypto/blake/blake.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoinconsensus_la_CPPFLAGS) $(CPPFLAGS) $(libbitcoinconsensus_la_CXXFLAGS) $(CXXFLAGS) -MT crypto/blake/libbitcoinconsensus_la-blake.lo -MD -MP -MF crypto/blake/$(DEPDIR)/libbitcoinconsensus_la-blake.Tpo -c -o crypto/blake/libbitcoinconsensus_la-blake.lo `test -f 'crypto/blake/blake.cpp' || echo '$(srcdir)/'`crypto/blake/blake.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) crypto/blake/$(DEPDIR)/libbitcoinconsensus_la-blake.Tpo crypto/blake/$(DEPDIR)/libbitcoinconsensus_la-blake.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='crypto/blake/blake.cpp' object='crypto/blake/libbitcoinconsensus_la-blake.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoinconsensus_la_CPPFLAGS) $(CPPFLAGS) $(libbitcoinconsensus_la_CXXFLAGS) $(CXXFLAGS) -c -o crypto/blake/libbitcoinconsensus_la-blake.lo `test -f 'crypto/blake/blake.cpp' || echo '$(srcdir)/'`crypto/blake/blake.cpp
 
 libbitcoinconsensus_la-hash.lo: hash.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libbitcoinconsensus_la_CPPFLAGS) $(CPPFLAGS) $(libbitcoinconsensus_la_CXXFLAGS) $(CXXFLAGS) -MT libbitcoinconsensus_la-hash.lo -MD -MP -MF $(DEPDIR)/libbitcoinconsensus_la-hash.Tpo -c -o libbitcoinconsensus_la-hash.lo `test -f 'hash.cpp' || echo '$(srcdir)/'`hash.cpp

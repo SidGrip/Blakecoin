@@ -217,6 +217,38 @@ public:
     }
 };
 
+/** BIP143 witness sighash writer using Bitcoin-style double SHA-256. */
+class CBIP143HashWriter
+{
+private:
+    CHash256 ctx;
+
+    const int nType;
+    const int nVersion;
+public:
+
+    CBIP143HashWriter(int nTypeIn, int nVersionIn) : nType(nTypeIn), nVersion(nVersionIn) {}
+
+    int GetType() const { return nType; }
+    int GetVersion() const { return nVersion; }
+
+    void write(const char *pch, size_t size) {
+        ctx.Write((const unsigned char*)pch, size);
+    }
+
+    uint256 GetHash() {
+        uint256 result;
+        ctx.Finalize((unsigned char*)&result);
+        return result;
+    }
+
+    template<typename T>
+    CBIP143HashWriter& operator<<(const T& obj) {
+        ::Serialize(*this, obj);
+        return (*this);
+    }
+};
+
 /** Reads data from an underlying stream, while hashing the read data. */
 template<typename Source>
 class CHashVerifier : public CHashWriter
