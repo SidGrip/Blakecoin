@@ -163,9 +163,40 @@ sedi() {
     fi
 }
 
+sync_windows_icon_assets() {
+    if ! command -v python3 &>/dev/null; then
+        warn "python3 not found; using checked-in Windows icon assets."
+        return 0
+    fi
+
+    if ! python3 -c 'from PIL import Image' >/dev/null 2>&1; then
+        warn "python3-pil not found; using checked-in Windows icon assets."
+        return 0
+    fi
+
+    info "Regenerating Windows icon assets from repo bitcoin.png sources..."
+    python3 - <<PY
+from PIL import Image
+
+sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+targets = [
+    ("$WINDOWS_ICON_SOURCE_PNG", "$WINDOWS_EXE_ICON_ICO"),
+    ("$WINDOWS_ICON_SOURCE_PNG", "$WINDOWS_INSTALLER_ICON_ICO"),
+    ("$WINDOWS_ICON_SOURCE_TESTNET_PNG", "$WINDOWS_EXE_ICON_TESTNET_ICO"),
+]
+
+for src, dst in targets:
+    img = Image.open(src).convert("RGBA")
+    img.save(dst, format="ICO", sizes=sizes)
+    print(f"    generated {dst} from {src}")
+PY
+}
+
 ensure_windows_icon_assets() {
     local missing=()
     local path
+
+    sync_windows_icon_assets
 
     for path in \
         "$WINDOWS_ICON_SOURCE_PNG" \
