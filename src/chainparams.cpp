@@ -78,14 +78,13 @@ class CMainParams : public CChainParams {
 public:
     CMainParams() {
         strNetworkID = "main";
-        // BEGIN BLAKECOIN: Blakecoin uses dynamic subsidy, not halving
-        // Subsidy formula: 25 + sqrt(difficulty * height) BLC
+        // Blakecoin 0.15.21 uses the project-approved flat 50 BLC subsidy.
+        // The legacy 0.8 dynamic subsidy is intentionally not replayed here.
         consensus.nSubsidyHalvingInterval = std::numeric_limits<int>::max(); // No halving
-        // END BLAKECOIN
         // BEGIN BLAKECOIN: Set BIP heights to disable version checks for historical blocks
         // Blakecoin uses different block versioning - disable these checks
         consensus.BIP34Height = 100000000; // Disabled - far in future
-        consensus.BIP34Hash = uint256S("0x000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8");
+        consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 100000000; // Disabled - far in future
         consensus.BIP66Height = 100000000; // Disabled - far in future
         // END BLAKECOIN
@@ -234,19 +233,19 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x0000000000000000000000000000000000000000000000000000000000000000");
 
-        pchMessageStart[0] = 0xfc;
-        pchMessageStart[1] = 0xc1;
-        pchMessageStart[2] = 0xb7;
-        pchMessageStart[3] = 0xdc;
-        nDefaultPort = 18777;
+        // Legacy 0.8 Blakecoin testnet message-start bytes (from main.cpp:2762-2765).
+        pchMessageStart[0] = 0x0b;
+        pchMessageStart[1] = 0x11;
+        pchMessageStart[2] = 0x09;
+        pchMessageStart[3] = 0x07;
+        nDefaultPort = 18773;
         nPruneAfterHeight = 1000;
 
-        // BEGIN BLAKECOIN: Testnet genesis block
-        // Testnet uses same genesis as mainnet for simplicity, or create a new one
-        genesis = CreateGenesisBlock(1381036817, 127057407, 503382015, 112, 5 * COIN);
-        consensus.hashGenesisBlock = uint256S("0x000000ba5cae4648b1a2b823f84cc3424e5d96d7234b39c6bb42800b2c7639be");
+        // Legacy 0.8 Blakecoin testnet genesis (from main.cpp:2815-2816).
+        // Same coinbase tx as mainnet (so merkle root matches), distinct nTime + nNonce.
+        genesis = CreateGenesisBlock(1381033532, 120396719, 503382015, 112, 5 * COIN);
+        consensus.hashGenesisBlock = uint256S("0x0000006a6b8058247f5b0edb1b34df7d34ae6c963c49da21b62a4b6558ac94dc");
         assert(genesis.hashMerkleRoot == uint256S("0x9e4654d5bb91c723c3dbbaee57761d06ed10ac17f4d8841746aeec7ff8206ddc"));
-        // END BLAKECOIN
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -269,17 +268,16 @@ public:
         fRequireStandard = false;
         fMineBlocksOnDemand = false;
 
-        // BEGIN BLAKECOIN: Testnet checkpoints
+        // Legacy 0.8 Blakecoin testnet checkpoints (from checkpoints.cpp:56-58).
         checkpointData = (CCheckpointData) {
             {
-                {0, uint256S("0x000000ba5cae4648b1a2b823f84cc3424e5d96d7234b39c6bb42800b2c7639be")},
+                {0, uint256S("0x0000006a6b8058247f5b0edb1b34df7d34ae6c963c49da21b62a4b6558ac94dc")},
             }
         };
-        // END BLAKECOIN
 
         chainTxData = ChainTxData{
             // Data as of testnet genesis
-            1372066562,
+            1381033532,
             1,
             0.01
         };
