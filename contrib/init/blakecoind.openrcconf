@@ -1,0 +1,33 @@
+# /etc/conf.d/blakecoind: config file for /etc/init.d/blakecoind
+
+# Config file location
+#BLAKECOIND_CONFIGFILE="/etc/blakecoin/blakecoin.conf"
+
+# What directory to write pidfile to?  (created and owned by $BLAKECOIND_USER)
+#BLAKECOIND_PIDDIR="/var/run/blakecoind"
+
+# What filename to give the pidfile
+#BLAKECOIND_PIDFILE="${BLAKECOIND_PIDDIR}/blakecoind.pid"
+
+# Where to write blakecoind data (be mindful that the blockchain is large)
+#BLAKECOIND_DATADIR="/var/lib/blakecoind"
+
+# User and group to own blakecoind process
+#BLAKECOIND_USER="blakecoin"
+#BLAKECOIND_GROUP="blakecoin"
+
+# Path to blakecoind executable
+#BLAKECOIND_BIN="/usr/bin/blakecoind"
+
+# Nice value to run blakecoind under
+#BLAKECOIND_NICE=0
+
+# Additional options (avoid -conf and -datadir, use flags above)
+#BLAKECOIND_OPTS=""
+
+# The timeout in seconds OpenRC will wait for blakecoind to terminate
+# after a SIGTERM has been raised.
+# Note that this will be mapped as argument to start-stop-daemon's
+# '--retry' option, which means you can specify a retry schedule
+# here. For more information see man 8 start-stop-daemon.
+BLAKECOIND_SIGTERM_TIMEOUT=600

@@ -18,10 +18,13 @@ import time
 import glob
 from collections import namedtuple
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'test', 'functional'))
+from blake256 import blake256_hash
+
 settings = {}
 
 def calc_hash_str(blk_hdr):
-    blk_hdr_hash = hashlib.sha256(hashlib.sha256(blk_hdr).digest()).digest()
+    blk_hdr_hash = blake256_hash(blk_hdr)
     return blk_hdr_hash[::-1].hex()
 
 def get_blk_dt(blk_hdr):
@@ -191,7 +194,9 @@ class BlockDataCopier:
                     return
 
             inhdr = self.inF.read(8)
-            if (not inhdr or (inhdr[0] == "\0")):
+            # In Python 3, bytes indexing returns an int, so comparing to "\0"
+            # never matches and preallocated zero-filled block-file tails can spin.
+            if (not inhdr or (inhdr[0] == 0)):
                 self.inF.close()
                 self.inF = None
                 self.inFn = self.inFn + 1
