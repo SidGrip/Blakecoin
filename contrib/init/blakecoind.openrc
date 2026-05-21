@@ -1,0 +1,93 @@
+#!/sbin/openrc-run
+
+# backward compatibility for existing gentoo layout
+#
+if [ -d "/var/lib/blakecoin/.blakecoin" ]; then
+	BLAKECOIND_DEFAULT_DATADIR="/var/lib/blakecoin/.blakecoin"
+else
+	BLAKECOIND_DEFAULT_DATADIR="/var/lib/blakecoind"
+fi
+
+BLAKECOIND_CONFIGFILE=${BLAKECOIND_CONFIGFILE:-/etc/blakecoin/blakecoin.conf}
+BLAKECOIND_PIDDIR=${BLAKECOIND_PIDDIR:-/var/run/blakecoind}
+BLAKECOIND_PIDFILE=${BLAKECOIND_PIDFILE:-${BLAKECOIND_PIDDIR}/blakecoind.pid}
+BLAKECOIND_DATADIR=${BLAKECOIND_DATADIR:-${BLAKECOIND_DEFAULT_DATADIR}}
+BLAKECOIND_USER=${BLAKECOIND_USER:-${BLAKECOIN_USER:-blakecoin}}
+BLAKECOIND_GROUP=${BLAKECOIND_GROUP:-blakecoin}
+BLAKECOIND_BIN=${BLAKECOIND_BIN:-/usr/bin/blakecoind}
+BLAKECOIND_NICE=${BLAKECOIND_NICE:-${NICELEVEL:-0}}
+BLAKECOIND_OPTS="${BLAKECOIND_OPTS:-${BLAKECOIN_OPTS}}"
+
+name="Blakecoin Daemon"
+description="Blakecoin cryptocurrency P2P network daemon"
+
+command="${BLAKECOIND_BIN}"
+command_args="-pid=\"${BLAKECOIND_PIDFILE}\" \
+		-conf=\"${BLAKECOIND_CONFIGFILE}\" \
+		-datadir=\"${BLAKECOIND_DATADIR}\" \
+		-daemon \
+		${BLAKECOIND_OPTS}"
+
+required_files="${BLAKECOIND_CONFIGFILE}"
+start_stop_daemon_args="-u ${BLAKECOIND_USER} \
+			-N ${BLAKECOIND_NICE} -w 2000"
+pidfile="${BLAKECOIND_PIDFILE}"
+
+# The retry schedule to use when stopping the daemon. Could be either
+# a timeout in seconds or multiple signal/timeout pairs (like
+# "SIGKILL/180 SIGTERM/300")
+retry="${BLAKECOIND_SIGTERM_TIMEOUT}"
+
+depend() {
+	need localmount net
+}
+
+# verify
+# 1) that the datadir exists and is writable (or create it)
+# 2) that a directory for the pid exists and is writable
+# 3) ownership and permissions on the config file
+start_pre() {
+	checkpath \
+	-d \
+	--mode 0750 \
+	--owner "${BLAKECOIND_USER}:${BLAKECOIND_GROUP}" \
+	"${BLAKECOIND_DATADIR}"
+
+	checkpath \
+	-d \
+	--mode 0755 \
+	--owner "${BLAKECOIND_USER}:${BLAKECOIND_GROUP}" \
+	"${BLAKECOIND_PIDDIR}"
+
+	checkpath -f \
+	-o "${BLAKECOIND_USER}:${BLAKECOIND_GROUP}" \
+	-m 0660 \
+	"${BLAKECOIND_CONFIGFILE}"
+
+	checkconfig || return 1
+}
+
+checkconfig()
+{
+	if grep -qs '^rpcuser=' "${BLAKECOIND_CONFIGFILE}" && \
+		! grep -qs '^rpcpassword=' "${BLAKECOIND_CONFIGFILE}" ; then
+		eerror ""
+		eerror "ERROR: You must set a secure rpcpassword to run blakecoind."
+		eerror "The setting must appear in ${BLAKECOIND_CONFIGFILE}"
+		eerror ""
+		eerror "This password is security critical to securing wallets "
+		eerror "and must not be the same as the rpcuser setting."
+		eerror "You can generate a suitable random password using the following "
+		eerror "command from the shell:"
+		eerror ""
+		eerror "bash -c 'tr -dc a-zA-Z0-9 < /dev/urandom | head -c32 && echo'"
+		eerror ""
+		eerror "It is recommended that you also set alertnotify so you are "
+		eerror "notified of problems:"
+		eerror ""
+		eerror "ie: alertnotify=echo %%s | mail -s \"Blakecoin Alert\"" \
+			"admin@foo.com"
+		eerror ""
+		return 1
+	fi
+}
