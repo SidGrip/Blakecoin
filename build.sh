@@ -44,11 +44,11 @@ REPO_URL="https://github.com/SidGrip/Blakecoin.git"
 REPO_BRANCH="0.25.2"
 QT_LINUX_LAUNCHER_SOURCE="$SCRIPT_DIR/contrib/linux-release/blakecoin-qt-launcher.c"
 APPIMAGE_PUBLIC_NAME="${COIN_NAME_UPPER}-${VERSION}-x86_64.AppImage"
-WINDOWS_ICON_SOURCE_PNG="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
-WINDOWS_ICON_SOURCE_TESTNET_PNG="$SCRIPT_DIR/src/qt/res/icons/bitcoin_testnet.png"
-WINDOWS_EXE_ICON_ICO="$SCRIPT_DIR/src/qt/res/icons/Blakecoin_32.ico"
-WINDOWS_EXE_ICON_TESTNET_ICO="$SCRIPT_DIR/src/qt/res/icons/Blakecoin_32_testnet.ico"
-WINDOWS_INSTALLER_ICON_ICO="$SCRIPT_DIR/share/pixmaps/Blakecoin.ico"
+WINDOWS_ICON_SOURCE_PNG="$SCRIPT_DIR/src/qt/res/icons/blakecoin.png"
+WINDOWS_ICON_SOURCE_TESTNET_PNG="$SCRIPT_DIR/src/qt/res/icons/blakecoin_testnet.png"
+WINDOWS_EXE_ICON_ICO="$SCRIPT_DIR/src/qt/res/icons/blakecoin_32.ico"
+WINDOWS_EXE_ICON_TESTNET_ICO="$SCRIPT_DIR/src/qt/res/icons/blakecoin_32_testnet.ico"
+WINDOWS_INSTALLER_ICON_ICO="$SCRIPT_DIR/share/pixmaps/blakecoin.ico"
 BDB_PACKAGE_MK="$SCRIPT_DIR/depends/packages/bdb.mk"
 BDB_CACHE_ROOT="$SCRIPT_DIR/.cache/bdb"
 NATIVE_LINUX_ALL_DEPS=()
@@ -238,7 +238,7 @@ sync_windows_icon_assets() {
         return 0
     fi
 
-    info "Regenerating Windows icon assets from repo bitcoin.png sources..."
+    info "Regenerating Windows icon assets from repo blakecoin.png sources..."
     python3 - <<PY
 from PIL import Image
 
@@ -1553,7 +1553,7 @@ install_linux_desktop_launcher() {
     local qt_bundle_dir="$1"
     local desktop_dir="$HOME/.local/share/applications"
     local icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
-    local icon_source="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
+    local icon_source="$SCRIPT_DIR/src/qt/res/icons/blakecoin.png"
 
     mkdir -p "$desktop_dir" "$icon_dir"
     if [[ -f "$icon_source" ]]; then
@@ -1648,7 +1648,7 @@ finalize_linux_native_output() {
     local qt_source_binary="$6"
     local install_packages="${7:-}"
     local output_dir=""
-    local icon_source="$SCRIPT_DIR/src/qt/res/icons/bitcoin.png"
+    local icon_source="$SCRIPT_DIR/src/qt/res/icons/blakecoin.png"
 
     ubuntu_ver="${ubuntu_ver:-unknown}"
     output_dir="$(linux_output_dir "$ubuntu_ver")"
@@ -2432,15 +2432,15 @@ mkdir -p "$APP_NAME/Contents/MacOS"
 mkdir -p "$APP_NAME/Contents/Resources"
 cp src/qt/blakecoin-qt "$APP_NAME/Contents/MacOS/Blakecoin-Qt"
 
-# Generate .icns icon from bitcoin.png
+# Generate .icns icon from blakecoin.png
 ICONS_DIR="src/qt/res/icons"
-if [ -f "$ICONS_DIR/bitcoin.png" ]; then
-    echo ">>> Generating macOS icon from bitcoin.png..."
+if [ -f "$ICONS_DIR/blakecoin.png" ]; then
+    echo ">>> Generating macOS icon from blakecoin.png..."
     apt-get update -qq >/dev/null 2>&1 || true
     apt-get install -y -qq python3-pil >/dev/null 2>&1 || true
     python3 -c "
 from PIL import Image
-img = Image.open('"'"'$ICONS_DIR/bitcoin.png'"'"')
+img = Image.open('"'"'$ICONS_DIR/blakecoin.png'"'"')
 img.save('"'"'$APP_NAME/Contents/Resources/blakecoin.icns'"'"')
 print('"'"'    Icon generated'"'"')
 " 2>/dev/null || echo "    Warning: Pillow icon conversion failed"
@@ -3032,8 +3032,8 @@ cp "$APPDIR/'"$COIN_NAME"'.desktop" "$APPDIR/usr/share/applications/"
 # Icon
 ICON_DIR="$APPDIR/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "$ICON_DIR"
-if [ -f src/qt/res/icons/bitcoin.png ]; then
-    cp src/qt/res/icons/bitcoin.png "$ICON_DIR/'"$COIN_NAME"'.png"
+if [ -f src/qt/res/icons/blakecoin.png ]; then
+    cp src/qt/res/icons/blakecoin.png "$ICON_DIR/'"$COIN_NAME"'.png"
 else
     echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" | base64 -d > "$ICON_DIR/'"$COIN_NAME"'.png"
 fi
@@ -3757,16 +3757,16 @@ QRC_EOF
         cp src/qt/blakecoin-qt "$output_dir/$app_name/Contents/MacOS/Blakecoin-Qt"
 
         local icons_dir="$SCRIPT_DIR/src/qt/res/icons"
-        if [[ -f "$icons_dir/bitcoin.png" ]] && command -v sips &>/dev/null && command -v iconutil &>/dev/null; then
-            info "Generating macOS icon from bitcoin.png..."
+        if [[ -f "$icons_dir/blakecoin.png" ]] && command -v sips &>/dev/null && command -v iconutil &>/dev/null; then
+            info "Generating macOS icon from blakecoin.png..."
             local iconset_root iconset_dir size size2
             iconset_root=$(mktemp -d)
             iconset_dir="$iconset_root/blakecoin.iconset"
             mkdir -p "$iconset_dir"
             for size in 16 32 128 256 512; do
-                sips -z "$size" "$size" "$icons_dir/bitcoin.png" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null 2>&1 || true
+                sips -z "$size" "$size" "$icons_dir/blakecoin.png" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null 2>&1 || true
                 size2=$((size * 2))
-                sips -z "$size2" "$size2" "$icons_dir/bitcoin.png" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null 2>&1 || true
+                sips -z "$size2" "$size2" "$icons_dir/blakecoin.png" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null 2>&1 || true
             done
             iconutil -c icns "$iconset_dir" -o "$output_dir/$app_name/Contents/Resources/blakecoin.icns" 2>/dev/null || true
             rm -rf "$iconset_root"
