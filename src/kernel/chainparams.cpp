@@ -98,7 +98,9 @@ public:
         consensus.CSVHeight = 1;
         // SegWit is buried, not re-signaled, in 0.25.2.
         consensus.SegwitHeight = 1978980;
-        consensus.MinBIP9WarningHeight = 0;
+        // Ignore historical bit-1 SegWit signaling before the buried activation
+        // height. Unknown-versionbit warnings remain enabled after this point.
+        consensus.MinBIP9WarningHeight = 1978980;
         consensus.powLimit = uint256S("000000ffff000000000000000000000000000000000000000000000000000000");
         consensus.nPowTargetTimespan = 20 * 3 * 60;
         consensus.nPowTargetSpacing = 3 * 60;
@@ -118,8 +120,8 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1814407200;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 2006310;
 
-        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000b1c9431ed2fce69097");
-        consensus.defaultAssumeValid = uint256S("0x00000000000037aece1cceecd449f9abf11d7f207aebd1445983b9cb61c2bbc0");
+        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000b1f8784ae8e3178c81");
+        consensus.defaultAssumeValid = uint256S("0x0000000000009808e40f3b6fcaa1256c9ec0690a6d9ca99edfd9341a2859ce5b");
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -170,6 +172,9 @@ public:
                 {1322950, uint256S("0x0000000000003205ddd0fb453c229a5e976cccd1516a64b5893d9d41cb11b2ff")},
                 {1967676, uint256S("0x00000000000037aece1cceecd449f9abf11d7f207aebd1445983b9cb61c2bbc0")},
                 {1978980, uint256S("0x000000000000b1c7b12f008aac514c68fdc2911e618b64522633e0ffcd8f6054")},
+                {1980000, uint256S("0x0000000000002fd870c585741727a1e8bbb0a79c7b3d2c03ef077336caf82641")},
+                {1985000, uint256S("0x000000000000dd6743ea01f6d41e2b28df7632cb8a9554ad3d1b2c08984852ee")},
+                {1987500, uint256S("0x0000000000009808e40f3b6fcaa1256c9ec0690a6d9ca99edfd9341a2859ce5b")},
             }
         };
 
@@ -178,9 +183,9 @@ public:
         };
 
         chainTxData = ChainTxData{
-            .nTime    = 1775789597,
-            .nTxCount = 2856278,
-            .dTxRate  = 0.005986504259551773,
+            .nTime    = 1779626441,
+            .nTxCount = 2878265,
+            .dTxRate  = 0.00580105607453496,
         };
     }
 };
