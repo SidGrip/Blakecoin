@@ -1490,6 +1490,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
         node.chainman = std::make_unique<ChainstateManager>(chainman_opts, blockman_opts);
         ChainstateManager& chainman = *node.chainman;
+        chainman.snapshot_validation_completed = [&node]() {
+            if (!Assert(node.chainman)->m_blockman.IsPruneMode()) {
+                LogPrintf("[snapshot] re-enabling NODE_NETWORK services\n");
+                if (node.connman) {
+                    node.connman->AddLocalServices(NODE_NETWORK);
+                }
+            }
+        };
 
         node::ChainstateLoadOptions options;
         options.mempool = Assert(node.mempool.get());
@@ -1615,8 +1623,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             }
         }
     } else {
-        LogPrintf("Setting NODE_NETWORK on non-prune mode\n");
-        nLocalServices = ServiceFlags(nLocalServices | NODE_NETWORK);
+        const bool snapshot_pending_validation{WITH_LOCK(cs_main, return chainman.IsSnapshotActive() && !chainman.IsSnapshotValidated())};
+        if (snapshot_pending_validation) {
+            LogPrintf("Running node in NODE_NETWORK_LIMITED mode until snapshot background validation completes\n");
+        } else {
+            LogPrintf("Setting NODE_NETWORK on non-prune mode\n");
+            nLocalServices = ServiceFlags(nLocalServices | NODE_NETWORK);
+        }
     }
 
     // ********************************************************* Step 11: import blocks
