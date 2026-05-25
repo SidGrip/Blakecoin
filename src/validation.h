@@ -35,6 +35,7 @@
 #include <versionbits.h>
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -957,6 +958,9 @@ public:
     using Options = kernel::ChainstateManagerOpts;
 
     explicit ChainstateManager(Options options, node::BlockManager::Options blockman_options);
+
+    //! Called after a loaded snapshot has been fully validated by the background chainstate.
+    std::function<void()> snapshot_validation_completed;
 
     const CChainParams& GetParams() const { return m_options.chainparams; }
     const Consensus::Params& GetConsensus() const { return m_options.chainparams.GetConsensus(); }
