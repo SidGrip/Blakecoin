@@ -3451,8 +3451,8 @@ void Chainstate::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pin
             queue.pop_front();
             pindex->nChainTx = (pindex->pprev ? pindex->pprev->nChainTx : 0) + pindex->nTx;
             pindex->nSequenceId = nBlockSequenceId++;
-            if (m_chain.Tip() == nullptr || !setBlockIndexCandidates.value_comp()(pindex, m_chain.Tip())) {
-                setBlockIndexCandidates.insert(pindex);
+            for (Chainstate* chainstate : m_chainman.GetAll()) {
+                chainstate->TryAddBlockIndexCandidate(pindex);
             }
             std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = m_blockman.m_blocks_unlinked.equal_range(pindex);
             while (range.first != range.second) {
@@ -3465,6 +3465,24 @@ void Chainstate::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pin
     } else {
         if (pindexNew->pprev && pindexNew->pprev->IsValid(BLOCK_VALID_TREE)) {
             m_blockman.m_blocks_unlinked.insert(std::make_pair(pindexNew->pprev, pindexNew));
+        }
+    }
+}
+
+void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
+{
+    AssertLockHeld(cs_main);
+
+    if (m_chain.Tip() != nullptr && setBlockIndexCandidates.value_comp()(pindex, m_chain.Tip())) {
+        return;
+    }
+
+    if (this == &m_chainman.ActiveChainstate()) {
+        setBlockIndexCandidates.insert(pindex);
+    } else if (!m_disabled) {
+        const CBlockIndex* snapshot_base{m_chainman.GetSnapshotBaseBlock()};
+        if (snapshot_base && snapshot_base->GetAncestor(pindex->nHeight) == pindex) {
+            setBlockIndexCandidates.insert(pindex);
         }
     }
 }
@@ -4085,6 +4103,12 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         return error("%s: ActivateBestChain failed (%s)", __func__, state.ToString());
     }
 
+    Chainstate* bg_chain{WITH_LOCK(cs_main, return (m_snapshot_chainstate && m_active_chainstate == m_snapshot_chainstate.get() && IsUsable(m_ibd_chainstate.get())) ? m_ibd_chainstate.get() : nullptr)};
+    BlockValidationState bg_state;
+    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block)) {
+        return error("%s: [background] ActivateBestChain failed (%s)", __func__, bg_state.ToString());
+    }
+
     return true;
 }
 
@@ -4218,7 +4242,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     bool skipped_l3_checks{false};
     LogPrintf("Verification progress: 0%%\n");
 
-    const bool is_snapshot_cs{!chainstate.m_from_snapshot_blockhash};
+    const bool is_snapshot_cs{chainstate.m_from_snapshot_blockhash.has_value()};
 
     for (pindex = chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         const int percentageDone = std::max(1, std::min(99, (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));

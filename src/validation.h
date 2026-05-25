@@ -566,6 +566,11 @@ public:
      */
     std::set<CBlockIndex*, node::CBlockIndexWorkComparator> setBlockIndexCandidates;
 
+    //! Add a block index entry to this chainstate's candidate set if it can
+    //! make progress for this chainstate. Snapshot background validation only
+    //! follows ancestors of the loaded snapshot base.
+    void TryAddBlockIndexCandidate(CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
     //! @returns A reference to the in-memory cache of the UTXO set.
     CCoinsViewCache& CoinsTip() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
