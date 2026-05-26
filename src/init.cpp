@@ -1494,6 +1494,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             if (!Assert(node.chainman)->m_blockman.IsPruneMode()) {
                 LogPrintf("[snapshot] re-enabling NODE_NETWORK services\n");
                 if (node.connman) {
+                    node.connman->RemoveLocalServices(NODE_NETWORK_LIMITED);
                     node.connman->AddLocalServices(NODE_NETWORK);
                 }
             }
@@ -1623,7 +1624,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             }
         }
     } else {
-        const bool snapshot_pending_validation{WITH_LOCK(cs_main, return chainman.IsSnapshotActive() && !chainman.IsSnapshotValidated())};
+        const bool snapshot_pending_validation{WITH_LOCK(cs_main, return chainman.ActiveChainstate().m_from_snapshot_blockhash.has_value() &&
+            !chainman.IsSnapshotValidated())};
         if (snapshot_pending_validation) {
             LogPrintf("Running node in NODE_NETWORK_LIMITED mode until snapshot background validation completes\n");
         } else {
