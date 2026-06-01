@@ -8,13 +8,23 @@
 #include <tinyformat.h>
 
 #include <cmath>
+#include <limits>
+
+namespace {
+CAmount ClampFeeRate(__int128 value)
+{
+    if (value > std::numeric_limits<CAmount>::max()) return std::numeric_limits<CAmount>::max();
+    if (value < std::numeric_limits<CAmount>::min()) return std::numeric_limits<CAmount>::min();
+    return static_cast<CAmount>(value);
+}
+} // namespace
 
 CFeeRate::CFeeRate(const CAmount& nFeePaid, uint32_t num_bytes)
 {
     const int64_t nSize{num_bytes};
 
     if (nSize > 0) {
-        nSatoshisPerK = nFeePaid * 1000 / nSize;
+        nSatoshisPerK = ClampFeeRate(static_cast<__int128>(nFeePaid) * 1000 / nSize);
     } else {
         nSatoshisPerK = 0;
     }

@@ -56,6 +56,7 @@ digital currency with no central authority.
 | Coinbase maturity | 100 blocks through historical 15.21 replay; 120 blocks from height 1,996,240 |
 | Default P2P port | 8773 |
 | RPC port | 8772 |
+| Max money sanity range | `21000000 * COIN` legacy transaction money-range consensus limit |
 | Max supply policy | 7,000,000,000 BLC target supply policy |
 | Mainnet genesis | `000000ba5cae4648b1a2b823f84cc3424e5d96d7234b39c6bb42800b2c7639be` |
 | Mainnet Bech32 HRP | `blc` |

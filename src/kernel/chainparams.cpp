@@ -223,11 +223,13 @@ public:
         // waiting on the 0.15.21 mainnet activation. Do NOT change.
         consensus.SegwitHeight = 1;
         consensus.MinBIP9WarningHeight = 0;
-        consensus.powLimit = uint256S("000000ffff000000000000000000000000000000000000000000000000000000");
+        // Private 25.2 feature-testnet uses regtest-style PoW so local CPU
+        // pool tests can advance blocks quickly while mainnet stays unchanged.
+        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 20 * 3 * 60;
         consensus.nPowTargetSpacing = 3 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
-        consensus.fPowNoRetargeting = false;
+        consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 15;
         consensus.nMinerConfirmationWindow = 20;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
