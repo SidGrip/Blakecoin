@@ -33,8 +33,8 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     // set reference point, paddings
     int paddingRight            = 34;
     int paddingTop              = 50;
-    int titleVersionVSpace      = 17;
-    int titleCopyrightVSpace    = 40;
+    int titleVersionVSpace      = 24;
+    int titleCopyrightVSpace    = 53;
     const int textLeft          = 250;
     const int textMaxWidth      = 480 - textLeft - paddingRight;
 
