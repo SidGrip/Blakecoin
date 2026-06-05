@@ -1911,6 +1911,8 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
     // Note: the blocks specified here are different than the ones used in ConnectBlock because DisconnectBlock
     // unwinds the blocks in reverse. As a result, the inconsistency is not discovered until the earlier
     // blocks with the duplicate coinbase transactions are disconnected.
+    // NOTE (Blakecoin): the heights/hashes below are *Bitcoin's* duplicate-coinbase
+    // blocks and never match on Blakecoin, so fEnforceBIP30 is always true here.
     bool fEnforceBIP30 = !((pindex->nHeight==91722 && pindex->GetBlockHash() == uint256S("0x00000000000271a2dc26e7667f8419f2e15416dc6955e5a6c6cdf3f2574dd08e")) ||
                            (pindex->nHeight==91812 && pindex->GetBlockHash() == uint256S("0x00000000000af0aed4792b1acee3d966af36cf5def14935db8de83d6f9306f2f")));
 
@@ -2154,6 +2156,19 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // initial block download.
     bool fEnforceBIP30 = !IsBIP30Repeat(*pindex);
 
+    // NOTE (Blakecoin): everything from here down documents *Bitcoin's* duplicate-
+    // coinbase history, not Blakecoin's. The hard-coded blocks (91722/91812/91842/
+    // 91880 in IsBIP30Repeat/IsBIP30Unspendable) and the out-of-sequence indicated
+    // heights (209,921 / 490,897 / 1,983,702) belong to the Bitcoin chain; they
+    // never occur on Blakecoin, which has its own genesis and a BIP30-clean
+    // history. Net effect on Blakecoin: IsBIP30Repeat() is always false, BIP34Hash
+    // is empty so the BIP34 short-circuit below never disables enforcement, and the
+    // nHeight >= BIP34_IMPLIES_BIP30_LIMIT clause keeps BIP30 on for the recent
+    // chain -- i.e. BIP30 is enforced for every block. The inherited Bitcoin
+    // rationale is retained verbatim below for provenance and must NOT be
+    // "simplified" into a behavioural change.
+    //
+    // [Bitcoin Core, for reference]
     // Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
     // with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs.  But by the
     // time BIP34 activated, in each of the existing pairs the duplicate coinbase had overwritten the first
@@ -5699,6 +5714,12 @@ Chainstate& ChainstateManager::ActivateExistingSnapshot(CTxMemPool* mempool, uin
     return *m_snapshot_chainstate;
 }
 
+// NOTE (Blakecoin): IsBIP30Repeat/IsBIP30Unspendable hold *Bitcoin's* historical
+// duplicate-coinbase exception blocks (heights 91722/91812/91842/91880 with
+// Bitcoin hashes), inherited verbatim from Bitcoin Core. On Blakecoin the
+// height+hash pairs never match (different genesis and history), so both always
+// return false and BIP30 is enforced for every block. Kept as-is to preserve
+// exact upstream behaviour; do not repurpose these for Blakecoin heights.
 bool IsBIP30Repeat(const CBlockIndex& block_index)
 {
     return (block_index.nHeight==91842 && block_index.GetBlockHash() == uint256S("0x00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")) ||
