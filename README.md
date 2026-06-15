@@ -85,6 +85,18 @@ git checkout 0.25.2
 For most users, downloading a tested release artifact from GitHub Releases is
 the simplest path. Use `build.sh` to build release artifacts locally.
 
+## UPnP / miniupnpc Build Profiles
+
+UPnP is only for desktop or home-router nodes that need automatic inbound P2P
+port mapping. Nodes still sync normally through outbound peers without UPnP.
+
+Pool, explorer, server, and Docker daemon builds should disable UPnP with
+`--without-miniupnpc` so the binary has no `libminiupnpc.so.*` runtime
+dependency.
+
+UPnP-enabled Ubuntu builds need `libminiupnpc-dev` at build time and the matching
+`libminiupnpc` runtime package on the target host.
+
 ## Upgrade Notes
 
 Before starting Blakecoin Core 0.25.2 on an existing data directory, close the
@@ -167,10 +179,10 @@ Other options:
 ```
 
 
-<!-- BEGIN electrium-build -->
-### Electrium Wallet
+<!-- BEGIN electrum-build -->
+### Electrum Wallet
 
-Build the Blakecoin ([Electrium](https://github.com/SidGrip/Blakestream-Electrium)) wallet by
+Build the Blakecoin ([Electrum](https://github.com/BlueDragon747/Blakestream-Electrum)) wallet by
 choosing a target (linux/windows build in an **amd64** container, so any amd64 Docker host — Linux,
 Windows, or an Intel Mac — can build either; only the macOS app needs a Mac):
 
@@ -181,13 +193,13 @@ Windows, or an Intel Mac — can build either; only the macOS app needs a Mac):
 ./build-electrum.sh all        # everything buildable on this host
 ```
 
-Artifacts land in `outputs/Electrium/BLC/`, named `Electrium-BLC-<version>`.
+Artifacts land in `outputs/Electrum/BLC/`, named `Electrum-BLC-<version>`.
 
 The wallet builder is the shared multicoin repo
-**[SidGrip/Blakestream-Electrium](https://github.com/SidGrip/Blakestream-Electrium)** — it also builds
+**[BlueDragon747/Blakestream-Electrum](https://github.com/BlueDragon747/Blakestream-Electrum)** — it also builds
 all six BlakeStream wallets at once (`build-single-wallets.sh`) and the ElectrumX **server** Docker
 image (`build-electrumx.sh`). `build-electrum.sh` auto-clones it when no local checkout is found.
-<!-- END electrium-build -->
+<!-- END electrum-build -->
 
 ## Platform Build Instructions
 
